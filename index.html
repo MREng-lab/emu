@@ -1,0 +1,2255 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="data:," />
+    <title>JARVIS試作</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Orbitron:wght@500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+    <style>
+      :root{
+        --bg:#02060d;
+        --bg2:#040b16;
+        --panel:rgba(8,20,34,.72);
+        --panel2:rgba(6,16,28,.85);
+        --glass:rgba(10,26,44,.55);
+        --line:rgba(56,214,255,.28);
+        --line-soft:rgba(56,214,255,.14);
+        --ink:#e8f6ff;
+        --ink-dim:#9db8cc;
+        --ink-faint:#5f7f96;
+        --green:#2fe07a;
+        --green-deep:#12a150;
+        --cyan:#38d6ff;
+        --cyan-dim:#1599c4;
+        --blue:#31b3f2;
+        --amber:#f2b13c;
+        --red:#ef5148;
+        --state:#2fe07a;
+        --mono:"Share Tech Mono", ui-monospace, SFMono-Regular, monospace;
+        --disp:"Orbitron", "Share Tech Mono", ui-monospace, monospace;
+        --sans:"Noto Sans JP", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
+      }
+      body[data-state="listening"]{ --state:var(--blue); }
+      body[data-state="thinking"]{ --state:var(--amber); }
+      body[data-state="speaking"]{ --state:var(--green); }
+      *{ box-sizing:border-box; }
+      html,body{ margin:0; padding:0; }
+      /* Nothing may ever widen the page past the device width: a single
+         over-wide row used to stretch the whole layout on phones, so
+         every line (including wrapping Japanese text) broke at the
+         wider width and ran off the right edge of the screen. */
+      html,body{ max-width:100%; overflow-x:hidden; overflow-x:clip; }
+      body{
+        background:
+          radial-gradient(900px 480px at 18% -80px, rgba(56,214,255,.14), transparent 60%),
+          radial-gradient(800px 520px at 88% 8%, rgba(47,224,122,.10), transparent 58%),
+          radial-gradient(700px 700px at 50% 115%, rgba(21,80,180,.12), transparent 60%),
+          linear-gradient(rgba(56,214,255,.028) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(56,214,255,.028) 1px, transparent 1px),
+          var(--bg);
+        background-size:auto,auto,auto,52px 52px,52px 52px,auto;
+        color:var(--ink);
+        font-family:var(--sans);
+        font-weight:400;
+        min-height:100vh;
+        -webkit-font-smoothing:antialiased;
+      }
+      button, input{ min-height:2.75rem; font-family:inherit; }
+      button{ cursor:pointer; }
+
+      .wrap{ width:100%; max-width:1180px; margin:0 auto; padding:14px 14px 34px; }
+
+      /* ---------- top status strip : glass HUD bar ---------- */
+      .topbar{
+        position:relative; display:flex; flex-wrap:wrap; gap:6px 20px; align-items:center; justify-content:space-between;
+        border:1px solid var(--line); background:var(--glass); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+        padding:10px 16px; border-radius:4px; box-shadow:0 0 24px rgba(56,214,255,.08), inset 0 0 24px rgba(56,214,255,.04);
+        clip-path:polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+      }
+      .topbar::before{ content:""; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg, transparent, var(--cyan), var(--green), transparent); opacity:.9; }
+      .topbar .sys{ font-family:var(--disp); font-size:.68rem; letter-spacing:.22em; color:var(--ink-faint); text-transform:uppercase; min-width:0; overflow-wrap:anywhere; }
+      .topbar .sys b{ color:var(--cyan); font-weight:700; text-shadow:0 0 10px rgba(56,214,255,.7); }
+      .clockbox{ display:flex; gap:16px; align-items:baseline; font-family:var(--mono); min-width:0; flex-wrap:wrap; }
+      .clockbox .date{ color:var(--ink-dim); font-size:.78rem; letter-spacing:.08em; }
+      .clockbox .time{ color:var(--ink); font-family:var(--disp); font-size:1.15rem; letter-spacing:.1em; text-shadow:0 0 12px rgba(56,214,255,.35); }
+      .clockbox .time .sec{ color:var(--state); font-size:.82rem; transition:color .3s; }
+
+      /* ---------- layout ---------- */
+      .grid{ display:grid; grid-template-columns:minmax(0,5fr) minmax(0,6fr); gap:14px; margin-top:14px; align-items:stretch; }
+      @media (max-width:860px){ .grid{ grid-template-columns:1fr; } }
+      /* Grid/flex children must be allowed to shrink below their
+         content's preferred width, or one long token pushes the
+         whole column wider than the screen. */
+      .grid>*, .lower>*{ min-width:0; }
+      .card{
+        position:relative; border:1px solid var(--line-soft); background:var(--panel);
+        backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+        border-radius:4px; box-shadow:0 0 0 1px rgba(0,0,0,.35), 0 10px 34px rgba(0,0,0,.42), inset 0 0 32px rgba(56,214,255,.03);
+      }
+      .card::before{ content:""; position:absolute; top:0; left:14px; right:14px; height:1px; background:linear-gradient(90deg, transparent, rgba(56,214,255,.55), transparent); pointer-events:none; z-index:5; }
+
+      /* ---------- stage : robot illustration, HUD frame ---------- */
+      .stage{ position:relative; overflow:hidden; overflow:clip; padding:26px 14px 18px; display:flex; flex-direction:column; align-items:center; justify-content:center; background:radial-gradient(420px 420px at 50% 42%, rgba(56,214,255,.09), transparent 68%), var(--panel); }
+      .stage::before{
+        content:""; position:absolute; inset:0;
+        background:
+          linear-gradient(rgba(56,214,255,.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(56,214,255,.045) 1px, transparent 1px);
+        background-size:36px 36px;
+        mask-image:radial-gradient(circle at 50% 42%, #000 0%, transparent 82%);
+        -webkit-mask-image:radial-gradient(circle at 50% 42%, #000 0%, transparent 82%);
+        pointer-events:none;
+      }
+      .hud-data{ position:absolute; font-family:var(--mono); font-size:.6rem; letter-spacing:.14em; color:rgba(56,214,255,.62); line-height:1.9; text-transform:uppercase; z-index:3; pointer-events:none; }
+      .hud-data.tl{ top:12px; left:14px; } .hud-data.tr{ top:12px; right:14px; text-align:right; }
+      .hud-data.bl{ bottom:10px; left:14px; } .hud-data.br{ bottom:10px; right:14px; text-align:right; }
+      .hud-data b{ color:var(--green); font-weight:400; }
+      @media (max-width:560px){ .hud-data.bl,.hud-data.br{ display:none; } .hud-data{ font-size:.55rem; } }
+      .portrait-wrap{ position:relative; z-index:2; width:min(430px, 100%); }
+      /* On phones the robot stays compact, so it never crowds the screen.
+         (Declared after the base rule so it actually wins at phone widths.) */
+      @media (max-width:860px){
+        .portrait-wrap{ width:min(248px, 74%); }
+      }
+      .rings{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:min(480px, 108%); aspect-ratio:1/1; pointer-events:none; opacity:.9; z-index:0; }
+      .rings svg{ width:100%; height:100%; overflow:visible; }
+      .ring-rot{ transform-origin:235px 235px; animation:spin 52s linear infinite; }
+      .ring-rot.rev{ animation:spinrev 78s linear infinite; }
+      .ring-rot.fast{ animation-duration:8s; }
+      @keyframes spin{ to{ transform:rotate(360deg); } }
+      @keyframes spinrev{ to{ transform:rotate(-360deg); } }
+      .ring-state{ stroke:var(--state) !important; transition:stroke .35s; }
+
+      /* circular glow behind the robot, breathing slowly while speaking */
+      .halo{
+        position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+        width:min(480px, 134%); aspect-ratio:1/1; border-radius:50%;
+        pointer-events:none; z-index:0; opacity:0;
+        background:radial-gradient(circle, rgba(47,224,122,.5) 0%, rgba(47,224,122,.16) 42%, rgba(47,224,122,0) 68%);
+        background:radial-gradient(circle, color-mix(in srgb, var(--state) 52%, transparent) 0%, color-mix(in srgb, var(--state) 16%, transparent) 42%, transparent 68%);
+      }
+      body[data-state="speaking"] .halo{ animation:halopulse 3.2s ease-in-out infinite; }
+      @keyframes halopulse{
+        0%,100%{ opacity:.16; transform:translate(-50%,-50%) scale(.97); }
+        50%{ opacity:.55; transform:translate(-50%,-50%) scale(1.045); }
+      }
+
+      .portrait{
+        position:relative; z-index:2; width:100%; aspect-ratio:1248/1088;
+        border:1px solid rgba(56,214,255,.35);
+        border:1px solid color-mix(in srgb, var(--state) 45%, rgba(56,214,255,.35));
+        background:rgba(4,12,22,.82); overflow:hidden; border-radius:3px;
+        clip-path:polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+        box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 0 28px rgba(56,214,255,.14), 0 0 26px color-mix(in srgb, var(--state) 18%, transparent), 0 22px 38px rgba(0,0,0,.55);
+        transition:border-color .35s, box-shadow .35s;
+      }
+      body[data-state="speaking"] .portrait{ animation:framepulse 1.1s ease-in-out infinite; }
+      @keyframes framepulse{
+        0%,100%{ box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 0 18px rgba(47,224,122,.18), 0 22px 38px rgba(0,0,0,.55); }
+        50%{ box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 0 36px rgba(47,224,122,.38), 0 22px 38px rgba(0,0,0,.55); }
+      }
+      /* Colors kept pale and desaturated on purpose, so the robot sits
+         quietly in the screen instead of standing out. Shape and lines
+         are untouched — this only tones the color down. */
+      .portrait img{ display:block; width:100%; height:100%; object-fit:contain; object-position:50% 50%; filter:saturate(.45) brightness(1.08) contrast(.93); }
+      /* ---------- concentric state rings (the robot art is retired
+         for now; the rings are the face of the prototype) ---------- */
+      .orb{ position:relative; z-index:2; width:min(300px, 84%); aspect-ratio:1/1; margin:10px auto 4px; will-change:transform; }
+      /* Living rings: each ring breathes on its own cycle — it swells
+         and shrinks while its line itself grows thicker and thinner.
+         The keyframe stops are deliberately uneven (a long inhale, a
+         brief hold, a slower release) and every ring runs a different
+         duration and delay, so the three never line up mechanically.
+         Speed is driven by --dur, which the state rules below retune
+         per ring: slow while idle, quicker while listening. */
+      .orb-ring{
+        position:absolute; border-radius:50%; pointer-events:none;
+        border-style:solid; border-color:var(--state); transition:border-color .35s;
+        animation-name:orbBreathe; animation-timing-function:ease-in-out;
+        animation-iteration-count:infinite; animation-duration:var(--dur, 5s);
+        will-change:transform, border-width, opacity;
+      }
+      .orb-ring.r1{ inset:0; --o:.28; --bw1:1px; --bw2:3.5px; --dur:5.6s; animation-delay:-.6s; border-color:rgba(56,214,255,.5); border-color:color-mix(in srgb, var(--state) 55%, transparent); }
+      .orb-ring.r2{ inset:13%; --o:.45; --bw1:1.5px; --bw2:5px; --dur:4.7s; animation-delay:-1.9s; }
+      .orb-ring.r3{ inset:26%; --o:.62; --bw1:1.5px; --bw2:4.5px; --dur:3.9s; animation-delay:-3.1s; }
+      .orb-core{
+        position:absolute; left:50%; top:50%; width:14%; aspect-ratio:1/1;
+        transform:translate(-50%,-50%); border-radius:50%;
+        background:var(--state); opacity:.85; transition:background .35s;
+        box-shadow:0 0 20px var(--state), 0 0 52px rgba(56,214,255,.25);
+        box-shadow:0 0 20px var(--state), 0 0 52px color-mix(in srgb, var(--state) 30%, transparent);
+        animation:coreBreathe 4.3s ease-in-out -1.2s infinite;
+      }
+      @keyframes orbBreathe{
+        0%{ transform:scale(.982); opacity:var(--o, .5); border-width:var(--bw1, 1.5px); }
+        34%{ transform:scale(1.016); opacity:calc(var(--o, .5) + .2); border-width:var(--bw2, 4px); }
+        48%{ transform:scale(1.026); opacity:calc(var(--o, .5) + .3); border-width:var(--bw2, 4px); }
+        72%{ transform:scale(1.004); opacity:calc(var(--o, .5) + .1); }
+        100%{ transform:scale(.982); opacity:var(--o, .5); border-width:var(--bw1, 1.5px); }
+      }
+      @keyframes coreBreathe{
+        0%,100%{ transform:translate(-50%,-50%) scale(.92); opacity:.7; }
+        42%{ transform:translate(-50%,-50%) scale(1.08); opacity:.92; }
+        60%{ transform:translate(-50%,-50%) scale(1.05); opacity:.88; }
+      }
+      /* idle: quiet and faint; each state retunes the breathing pace,
+         keeping the rings out of sync with each other */
+      body[data-state="idle"] .orb{ opacity:.6; }
+      body[data-state="idle"] .orb-ring.r1{ --dur:6.4s; }
+      body[data-state="idle"] .orb-ring.r2{ --dur:5.3s; }
+      body[data-state="idle"] .orb-ring.r3{ --dur:4.5s; }
+      body[data-state="listening"] .orb-ring.r1{ --dur:2.7s; }
+      body[data-state="listening"] .orb-ring.r2{ --dur:2.25s; }
+      body[data-state="listening"] .orb-ring.r3{ --dur:1.85s; }
+      body[data-state="thinking"] .orb-ring.r1{ --dur:1.05s; }
+      body[data-state="thinking"] .orb-ring.r2{ --dur:.88s; }
+      body[data-state="thinking"] .orb-ring.r3{ --dur:.74s; }
+      body[data-state="speaking"] .orb-ring.r1{ --dur:1.7s; }
+      body[data-state="speaking"] .orb-ring.r2{ --dur:1.45s; }
+      body[data-state="speaking"] .orb-ring.r3{ --dur:1.2s; }
+      body[data-state="speaking"] .orb-core{ animation:corepulse 1.1s ease-in-out infinite; }
+      .robot-svg .eye, .robot-svg .core-fill{ fill:var(--state); transition:fill .35s; }
+      .robot-svg .eye{ filter:drop-shadow(0 0 6px var(--state)); }
+      .robot-svg .core-fill{ filter:drop-shadow(0 0 9px var(--state)); }
+      .robot-svg .core-ring{ stroke:var(--state); transition:stroke .35s; }
+      body[data-state="speaking"] .robot-svg .core-fill{ animation:corepulse 1.1s ease-in-out infinite; }
+      @keyframes corepulse{ 0%,100%{ opacity:1; } 50%{ opacity:.45; } }
+      .portrait::after{
+        content:""; position:absolute; inset:0; pointer-events:none;
+        background:linear-gradient(180deg, transparent 62%, rgba(3,6,10,.55) 100%);
+      }
+      .portrait .scan{
+        position:absolute; left:0; right:0; top:0; height:1px; z-index:3;
+        background:linear-gradient(90deg, transparent, var(--state), transparent); opacity:0;
+      }
+      body[data-state="thinking"] .portrait .scan{ opacity:.9; animation:scan 1.15s linear infinite; }
+      @keyframes scan{ from{ top:0; } to{ top:100%; } }
+      .corner{ position:absolute; width:18px; height:18px; z-index:4; pointer-events:none; }
+      .corner.tl{ top:6px; left:6px; border-top:2px solid var(--state); border-left:2px solid var(--state); }
+      .corner.tr{ top:6px; right:6px; border-top:2px solid var(--state); border-right:2px solid var(--state); }
+      .corner.bl{ bottom:6px; left:6px; border-bottom:2px solid var(--state); border-left:2px solid var(--state); }
+      .corner.br{ bottom:6px; right:6px; border-bottom:2px solid var(--state); border-right:2px solid var(--state); }
+      .portrait .caption{
+        position:absolute; left:10px; bottom:8px; z-index:4; font-family:var(--mono);
+        font-size:.62rem; letter-spacing:.18em; color:rgba(238,244,240,.85); text-transform:uppercase;
+      }
+
+      .stateline{ position:relative; z-index:2; margin-top:18px; text-align:center; width:100%; }
+      .statepill{
+        display:inline-flex; align-items:center; gap:9px;
+        border:1px solid var(--line); border-radius:999px; padding:7px 16px 7px 12px;
+        background:rgba(3,12,22,.82); backdrop-filter:blur(8px); font-size:.9rem; font-weight:500; letter-spacing:.12em;
+        box-shadow:0 0 16px color-mix(in srgb, var(--state) 22%, transparent), inset 0 0 12px rgba(56,214,255,.06);
+      }
+      .statepill .dot{ width:8px; height:8px; background:var(--state); box-shadow:0 0 9px var(--state); animation:dotpulse 2.2s infinite; transition:background .3s, box-shadow .3s; }
+      body[data-state="thinking"] .statepill .dot{ animation-duration:.55s; }
+      body[data-state="speaking"] .statepill .dot{ animation-duration:.4s; }
+      @keyframes dotpulse{ 0%,100%{ transform:scale(1); opacity:1; } 50%{ transform:scale(1.35); opacity:.6; } }
+      .stateline .sub{ margin-top:8px; color:var(--ink-dim); font-size:.84rem; font-weight:300; min-height:1.3em; }
+
+      .wave{ position:relative; z-index:2; display:flex; gap:2px; align-items:center; height:22px; margin-top:8px; }
+      .wave span{ width:2px; height:4px; background:var(--green-deep); opacity:.3; }
+      body[data-state="listening"] .wave span, body[data-state="speaking"] .wave span{ animation:wv .65s ease-in-out infinite alternate; opacity:1; background:var(--state); }
+      .wave span:nth-child(3n){ animation-delay:.12s !important; } .wave span:nth-child(4n){ animation-delay:.24s !important; }
+      .wave span:nth-child(5n){ animation-delay:.05s !important; } .wave span:nth-child(7n){ animation-delay:.3s !important; }
+      @keyframes wv{ from{ height:3px; } to{ height:19px; } }
+
+      /* ---------- console ---------- */
+      .console{ display:flex; flex-direction:column; min-height:560px; }
+      .console-head{
+        display:flex; align-items:center; justify-content:space-between; gap:8px 10px; flex-wrap:wrap;
+        padding:10px 14px; border-bottom:1px solid var(--line-soft);
+      }
+      .console-head .ttl{ font-family:var(--disp); font-size:.68rem; letter-spacing:.24em; color:var(--cyan); text-transform:uppercase; text-shadow:0 0 8px rgba(56,214,255,.45); }
+      .voicetoggle{
+        border:1px solid var(--line); background:rgba(4,14,26,.8); color:var(--ink-dim);
+        border-radius:999px; padding:0 13px; font-size:.8rem; display:inline-flex; align-items:center; gap:8px; min-height:2.3rem;
+        white-space:nowrap; flex:none; max-width:100%;
+      }
+      @media (max-width:560px){
+        .voicetoggle{ padding:0 9px; font-size:.76rem; gap:6px; }
+        .console-head .ttl{ letter-spacing:.12em; }
+      }
+      .voicetoggle .vdot{ width:7px; height:7px; background:var(--ink-faint); }
+      .voicetoggle[aria-pressed="true"]{ color:var(--green); border-color:rgba(47,224,122,.45); }
+      .voicetoggle[aria-pressed="true"] .vdot{ background:var(--green); box-shadow:0 0 7px var(--green); }
+
+      /* ---------- brain settings panel ---------- */
+      .settings{
+        margin:0 14px 12px; border:1px solid var(--line-soft); background:rgba(3,10,20,.6);
+        padding:12px; border-radius:2px;
+      }
+      .settings[hidden]{ display:none; }
+      .set-row{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+      .set-row label{ font-size:.8rem; color:var(--ink-dim); letter-spacing:.06em; }
+      .set-row input, .set-row select{
+        background:rgba(3,12,22,.85); border:1px solid var(--line-soft); border-radius:2px;
+        color:var(--ink); padding:0 12px; font-size:.95rem; min-height:2.6rem; width:100%; font-family:inherit;
+      }
+      .set-row input:focus, .set-row select:focus{ outline:1px solid rgba(56,214,255,.65); outline-offset:0; }
+      .set-note{ margin:0 0 10px; font-size:.78rem; line-height:1.65; color:var(--ink-faint); font-weight:300; }
+      .set-actions{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+      .set-btn{
+        border:1px solid var(--line); background:rgba(4,14,26,.8); color:var(--ink-dim);
+        border-radius:2px; padding:0 14px; font-size:.85rem; min-height:2.4rem;
+      }
+      .set-btn.primary{ color:#eafff3; border-color:rgba(47,224,122,.5); background:linear-gradient(135deg, var(--cyan-dim), var(--green-deep)); font-weight:700; }
+      .set-status{ font-size:.78rem; color:var(--ink-dim); font-family:var(--mono); min-width:0; overflow-wrap:anywhere; }
+
+      .log{ flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px; max-height:520px; }
+      .msg{ max-width:90%; padding:9px 12px; border-radius:2px; font-size:.93rem; line-height:1.65; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; font-weight:300; }
+      .msg .who{ display:block; font-family:var(--mono); font-size:.64rem; letter-spacing:.16em; margin-bottom:3px; opacity:.8; }
+      .msg.ai{ align-self:flex-start; background:rgba(8,30,24,.62); border:1px solid rgba(47,224,122,.30); border-left:2px solid var(--green); backdrop-filter:blur(6px); box-shadow:0 0 14px rgba(47,224,122,.06); }
+      .msg.ai .who{ color:var(--green); }
+      .msg.me{ align-self:flex-end; background:rgba(6,24,42,.66); border:1px solid rgba(56,214,255,.32); border-right:2px solid var(--cyan); backdrop-filter:blur(6px); box-shadow:0 0 14px rgba(56,214,255,.06); }
+      .msg.me .who{ color:var(--cyan); text-align:right; }
+      .msg.note{ align-self:stretch; background:rgba(242,177,60,.06); border:1px solid rgba(242,177,60,.35); color:#e8cf9a; font-size:.84rem; text-align:left; max-width:100%; font-weight:400; }
+      .msg.note .who{ color:var(--amber); }
+
+      /* voice fallback notice */
+      .voicenotice{
+        margin:0 14px 12px; border:1px solid rgba(242,177,60,.5); background:rgba(242,177,60,.07);
+        padding:11px 12px; border-radius:2px; display:none; max-width:100%; min-width:0;
+      }
+      .voicenotice.show{ display:block; }
+      .voicenotice .vn-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+      .voicenotice .vn-title{ color:var(--amber); font-size:.88rem; font-weight:700; letter-spacing:.02em; line-height:1.45; flex:1 1 auto; min-width:0; overflow-wrap:anywhere; }
+      .voicenotice .vn-close{
+        flex:none; min-height:2rem; padding:0 10px; border:1px solid rgba(242,177,60,.4); background:transparent;
+        color:#e8cf9a; font-size:.76rem; border-radius:2px;
+      }
+      .voicenotice .vn-body{ margin-top:6px; color:var(--ink); font-size:.92rem; line-height:1.7; font-weight:300; overflow-wrap:anywhere; min-width:0; }
+      .voicenotice .vn-body ol{ margin:6px 0 0; padding-left:1.25em; }
+      .voicenotice .vn-body li{ margin:2px 0; }
+      .voicenotice .vn-body b{ font-weight:700; }
+      .voicenotice .vn-title{ font-size:1.02rem; }
+      .vn-raw{
+        margin:10px 0 0; padding:9px 11px; border:1px solid rgba(239,81,72,.55); background:rgba(239,81,72,.10);
+        color:#ffb3ad; font-family:var(--mono); font-size:.92rem; line-height:1.55; word-break:break-all; overflow-wrap:anywhere; max-width:100%; border-radius:2px;
+      }
+      .vn-diag{
+        margin:10px 0 0; padding:9px 11px; border:1px solid var(--line-soft); background:rgba(3,10,20,.72);
+        color:var(--ink-dim); font-family:var(--mono); font-size:.78rem; line-height:1.75; word-break:break-all; overflow-wrap:anywhere; max-width:100%; border-radius:2px;
+      }
+      .vn-diag b{ color:var(--cyan); font-weight:400; }
+
+      .chips{ display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 11px; }
+      .chip{
+        border:1px solid var(--line-soft); background:rgba(6,18,32,.75); color:var(--ink-dim);
+        border-radius:999px; padding:0 13px; font-size:.83rem; min-height:2.35rem;
+      }
+      .chip:hover{ color:var(--cyan); border-color:rgba(56,214,255,.6); box-shadow:0 0 12px rgba(56,214,255,.16); }
+
+      .inputrow{ display:flex; gap:7px; padding:11px 14px 14px; border-top:1px solid var(--line-soft); background:rgba(3,10,20,.45); }
+      .inputrow input{
+        flex:1; min-width:0; background:rgba(3,12,22,.85); border:1px solid var(--line-soft); border-radius:999px;
+        color:var(--ink); padding:0 16px; font-size:1rem; font-weight:300;
+      }
+      .inputrow input:focus{ outline:1px solid rgba(56,214,255,.65); outline-offset:0; border-color:transparent; box-shadow:0 0 14px rgba(56,214,255,.18); }
+      .btn-send{
+        background:linear-gradient(135deg, var(--cyan-dim), var(--green-deep)); border:1px solid rgba(56,214,255,.5); color:#eafff3;
+        font-weight:700; border-radius:999px; padding:0 19px; font-size:.93rem; flex:none; letter-spacing:.06em;
+        box-shadow:0 0 16px rgba(47,224,122,.22);
+      }
+      .btn-send:hover{ filter:brightness(1.18); }
+      .btn-mic{
+        width:48px; flex:none; border-radius:50%; border:1px solid var(--line); background:rgba(4,14,26,.85);
+        color:var(--cyan); display:flex; align-items:center; justify-content:center; padding:0;
+        box-shadow:0 0 12px rgba(56,214,255,.12);
+      }
+      .btn-mic svg{ width:21px; height:21px; }
+      .btn-mic.rec{ color:#fff; background:var(--red); border-color:var(--red); animation:micpulse 1s infinite; }
+      @keyframes micpulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(239,81,72,.5); } 50%{ box-shadow:0 0 0 7px rgba(239,81,72,0); } }
+      .btn-mic.unsupported{ color:var(--amber); border-color:rgba(242,177,60,.5); border-style:dashed; }
+      .btn-mic.blocked{ color:var(--amber); border-color:rgba(242,177,60,.6); }
+      .vn-retry{
+        display:none; margin-top:10px; border:1px solid rgba(242,177,60,.55); background:rgba(242,177,60,.12);
+        color:#e8cf9a; border-radius:2px; padding:0 14px; font-size:.85rem; align-items:center;
+      }
+      .vn-retry.show{ display:inline-flex; }
+
+      /* ---------- mic directly under the robot (stage) ---------- */
+      .stage-mic{ position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; gap:8px; margin-top:20px; }
+      .btn-mic.stage-mic-btn{
+        width:76px; height:76px; min-height:76px; border-width:1.5px;
+        background:radial-gradient(circle at 50% 38%, rgba(56,214,255,.18), rgba(4,14,26,.9) 68%);
+        box-shadow:0 0 0 1px rgba(0,0,0,.5), 0 0 22px rgba(56,214,255,.22), inset 0 0 18px rgba(56,214,255,.08);
+      }
+      .btn-mic.stage-mic-btn svg{ width:32px; height:32px; }
+      .btn-mic.stage-mic-btn:active{ transform:scale(.96); }
+      .stage-mic-label{ font-family:var(--mono); font-size:.72rem; letter-spacing:.18em; color:var(--ink-dim); text-transform:uppercase; }
+      body[data-state="listening"] .stage-mic-label{ color:var(--blue); }
+      .stage-mic-hint{ font-size:.72rem; line-height:1.65; color:var(--ink-faint); text-align:center; max-width:320px; font-weight:300; }
+      .stage-mic-hint b{ color:var(--ink-dim); font-weight:700; }
+      @media (max-width:860px){
+        .stage-mic{ margin-top:16px; }
+        .btn-mic.stage-mic-btn{ width:80px; height:80px; min-height:80px; }
+        .btn-mic.stage-mic-btn svg{ width:34px; height:34px; }
+      }
+
+      /* ---------- lower panels ---------- */
+      .lower{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px; margin-top:14px; }
+      @media (max-width:860px){ .lower{ grid-template-columns:1fr; } }
+      .panel{ padding:16px 17px; overflow:hidden; }
+      .panel h2{ margin:0 0 12px; font-size:.68rem; font-family:var(--disp); letter-spacing:.22em; color:var(--cyan); text-transform:uppercase; font-weight:500; text-shadow:0 0 8px rgba(56,214,255,.35); }
+      .panel ul{ margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:10px; }
+      .panel li{ font-size:.9rem; line-height:1.55; color:var(--ink); display:flex; gap:9px; font-weight:300; min-width:0; }
+      .panel li>span{ min-width:0; overflow-wrap:anywhere; }
+      .panel li .tag{
+        flex:none; font-family:var(--mono); font-size:.64rem; letter-spacing:.03em; padding:3px 7px; border-radius:2px;
+        border:1px solid var(--line); color:var(--ink-dim); height:fit-content; margin-top:2px; white-space:nowrap;
+      }
+      .panel li .tag.wait{ color:var(--amber); border-color:rgba(242,177,60,.4); }
+      .panel li .tag.done{ color:var(--green); border-color:rgba(47,224,122,.4); }
+      .panel li .tag.go{ color:var(--blue); border-color:rgba(49,179,242,.4); }
+      .panel li small{ display:block; color:var(--ink-dim); font-size:.78rem; margin-top:1px; }
+      .panel p{ margin:0; font-size:.9rem; line-height:1.7; color:var(--ink-dim); font-weight:300; overflow-wrap:anywhere; }
+      .panel p b{ color:var(--ink); font-weight:700; }
+      .cmdlist li{ font-family:var(--mono); font-size:.82rem; color:var(--ink-dim); display:block; overflow-wrap:anywhere; }
+      .cmdlist li::before{ content:"› "; color:var(--green); }
+
+      .foot{ margin-top:18px; text-align:center; color:var(--ink-faint); font-size:.68rem; font-family:var(--disp); letter-spacing:.28em; }
+      .foot::before,.foot::after{ content:" —— "; color:rgba(56,214,255,.4); }
+
+      /* ---------- narrow screens (phones, ~360-430px wide) ----------
+         Desktop values above stay untouched; everything here only
+         tightens type and spacing so no row needs more than the
+         device width and the page never scrolls sideways. */
+      @media (max-width:560px){
+        .wrap{ padding:12px 10px 28px; }
+        .topbar{ padding:9px 12px; gap:4px 12px; }
+        /* The system label is one unbreakable &nbsp; run in a wide
+           display font; shrunk here so its single line fits. */
+        .topbar .sys{ font-size:.58rem; letter-spacing:.1em; }
+        .clockbox{ gap:10px; }
+        .clockbox .date{ font-size:.72rem; }
+        .clockbox .time{ font-size:1rem; }
+        .foot{ font-size:.6rem; letter-spacing:.12em; }
+        .stage{ padding:20px 10px 16px; }
+        /* Decorative rings/glow stay inside the stage at phone width. */
+        .rings{ width:100%; }
+        .halo{ width:112%; }
+        .console{ min-height:0; }
+        .log{ max-height:60vh; }
+        .console-head{ padding:10px; }
+        .settings{ margin:0 10px 10px; }
+        .voicenotice{ margin:0 10px 10px; }
+        .chips{ padding:0 10px 10px; }
+        .inputrow{ padding:10px 10px 12px; }
+        /* 16px or larger keeps iOS Safari from auto-zooming the whole
+           page when a settings field is tapped. */
+        .set-row input, .set-row select{ font-size:1rem; }
+        .panel{ padding:14px 13px; }
+      }
+
+      @media (prefers-reduced-motion: reduce){
+        .ring-rot, .wave span, .portrait, .portrait .scan, .statepill .dot, .halo, .robot-svg .core-fill, .orb-ring, .orb-core{ animation:none !important; }
+        .orb{ transform:none !important; }
+        body[data-state="speaking"] .halo{ opacity:.25; }
+      }
+    </style>
+  </head>
+  <body data-state="idle">
+    <div class="wrap">
+
+      <div class="topbar">
+        <div class="sys">MR&nbsp;ASSISTANT&nbsp;SYSTEM&nbsp;·&nbsp;<b>PROTOTYPE&nbsp;01</b></div>
+        <div class="clockbox">
+          <span class="date" id="dateLabel">----/--/--</span>
+          <span class="time" id="clock">--:--<span class="sec">--</span></span>
+        </div>
+      </div>
+
+      <div class="grid">
+        <!-- ======== STAGE : drawn illustration of the posted robot ======== -->
+        <section class="card stage" aria-label="アシスタントの姿と状態">
+          <div class="hud-data tl" aria-hidden="true">SYS&nbsp;<b>ONLINE</b><br>CORE&nbsp;01&nbsp;/&nbsp;LINK&nbsp;OK</div>
+          <div class="hud-data tr" aria-hidden="true">PWR&nbsp;<b>98.2</b><br>VOICE&nbsp;READY</div>
+          <div class="hud-data bl" aria-hidden="true">SCAN&nbsp;<b>ACTIVE</b><br>GRID&nbsp;A-01</div>
+          <div class="hud-data br" aria-hidden="true">MODE&nbsp;<b>STANDBY</b></div>
+          <div class="portrait-wrap">
+            <div class="halo" aria-hidden="true"></div>
+            <div class="rings" aria-hidden="true">
+              <svg viewBox="0 0 470 470" fill="none">
+                <g class="ring-rot" id="ring1">
+                  <circle cx="235" cy="235" r="226" stroke="#1d2a38" stroke-width="1" stroke-dasharray="3 12"/>
+                  <circle class="ring-state" cx="235" cy="235" r="226" stroke="#2fe07a" stroke-width="2" stroke-dasharray="52 1368" opacity=".85"/>
+                </g>
+                <g class="ring-rot rev" id="ring2">
+                  <circle cx="235" cy="235" r="204" stroke="#1a2836" stroke-width="6" stroke-dasharray="1 13" opacity=".9"/>
+                  <circle cx="235" cy="235" r="204" stroke="#31b3f2" stroke-width="1.5" stroke-dasharray="96 1184" opacity=".45"/>
+                </g>
+              </svg>
+            </div>
+            <div class="orb" role="img" aria-label="同心円のリング。状態によって色と明滅の速さが変わります">
+              <span class="orb-ring r1"></span>
+              <span class="orb-ring r2"></span>
+              <span class="orb-ring r3"></span>
+              <span class="orb-core"></span>
+            </div>
+          </div>
+
+          <div class="stage-mic">
+            <button class="btn-mic stage-mic-btn" id="micBtn" type="button" aria-label="音声で話す">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 19v3"/></svg>
+            </button>
+            <span class="stage-mic-label" id="micLabel">タップしてマイク ON</span>
+            <span class="stage-mic-hint">オンの間は聞き取り続けます。言葉が1秒途切れたら返事をし、終わるとまた聞き取りに戻ります。閉じる時はもう一度押すか、「終わり」「終了」「マイクオフ」「ありがとう」<b>だけ</b>を言ってください（文の中で使うだけでは閉じません）</span>
+          </div>
+
+          <div class="stateline">
+            <span class="statepill"><span class="dot"></span><span id="stateLabel">待機中</span></span>
+            <div class="sub" id="stateSub">お呼びでしょうか。話しかけてください。</div>
+          </div>
+          <div class="wave" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </section>
+
+        <!-- ======== CONSOLE ======== -->
+        <section class="card console" aria-label="会話コンソール">
+          <div class="console-head">
+            <span class="ttl">Conversation</span>
+            <button class="voicetoggle" id="voiceToggle" type="button" aria-pressed="true">
+              <span class="vdot"></span>読み上げ <span id="voiceToggleState">ON</span>
+            </button>
+            <button class="voicetoggle" id="settingsToggle" type="button" aria-pressed="false" aria-expanded="false" aria-controls="settingsPanel">
+              <span class="vdot"></span>頭脳の設定 <span id="settingsState">未設定</span>
+            </button>
+          </div>
+
+          <div class="settings" id="settingsPanel" hidden>
+            <div class="set-row">
+              <label for="apiKeyInput">OpenAI APIキー（頭脳への接続）</label>
+              <input id="apiKeyInput" type="password" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false" />
+            </div>
+            <p class="set-note">キーはこのPCの中にだけ保存されます（このブラウザーの保存領域のみ）。OpenAI以外へ送ることはありません。決まった型（時刻・計算・タイマーなど）以外の自由な質問は、このキーで OpenAI の頭脳が答えます。</p>
+            <div class="set-row">
+              <label for="modelSelect">頭脳のモデル</label>
+              <select id="modelSelect">
+                <option value="gpt-4o">gpt-4o（しっかり答える）</option>
+                <option value="gpt-4o-mini">gpt-4o-mini（速くて費用が安い）</option>
+              </select>
+            </div>
+            <div class="set-row">
+              <label for="voiceSelect">声（OpenAIの自然な声）</label>
+              <select id="voiceSelect">
+                <option value="nova">nova（女性・自然）</option>
+                <option value="shimmer">shimmer（女性・明るめ）</option>
+                <option value="alloy">alloy（中性）</option>
+                <option value="onyx">onyx（男性・低め）</option>
+              </select>
+            </div>
+            <p class="set-note">返事の読み上げは、頭脳と同じキーで OpenAI の音声合成（自然な声）を使います。キーが無い時や通信が切れた時は、ブラウザーの標準の声に自動で戻ります。</p>
+            <div class="set-actions">
+              <button class="set-btn" id="voiceTest" type="button">声のテスト</button>
+              <span class="set-status" id="voiceTestStatus"></span>
+            </div>
+            <div class="set-actions">
+              <button class="set-btn primary" id="keySave" type="button">キーを保存</button>
+              <button class="set-btn" id="keyClear" type="button">キーを消す</button>
+              <span class="set-status" id="keyStatus">キー：未設定</span>
+            </div>
+          </div>
+
+          <div class="log" id="log" aria-live="polite"></div>
+
+          <div class="voicenotice" id="voiceNotice" role="alert">
+            <div class="vn-head">
+              <span class="vn-title" id="voiceNoticeTitle">音声入力について</span>
+              <button class="vn-close" id="voiceNoticeClose" type="button">閉じる</button>
+            </div>
+            <div class="vn-body" id="voiceNoticeBody"></div>
+            <button class="vn-retry" id="voiceRetry" type="button">マイクをもう一度試す</button>
+          </div>
+
+          <div class="chips" id="chips">
+            <button class="chip" type="button" data-q="今何時？">今何時？</button>
+            <button class="chip" type="button" data-q="今日は何日？">今日は何日？</button>
+            <button class="chip" type="button" data-q="進行中の仕事を教えて">進行中の仕事</button>
+            <button class="chip" type="button" data-q="インスタの状況は？">インスタの状況</button>
+            <button class="chip" type="button" data-q="FR5の進み具合は？">FR5の進み具合</button>
+            <button class="chip" type="button" data-q="自己紹介して">自己紹介</button>
+            <button class="chip" type="button" data-q="12×34は？">計算の例</button>
+            <button class="chip" type="button" data-q="3分タイマー">タイマーの例</button>
+            <button class="chip" type="button" data-q="会社について教えて">会社について</button>
+            <button class="chip" type="button" data-q="FAって何の略？">自由な質問の例</button>
+          </div>
+
+          <form class="inputrow" id="inputForm">
+            <input id="textInput" type="text" placeholder="話しかけてください（例：今何時？）" autocomplete="off" />
+            <button class="btn-send" type="submit">送信</button>
+          </form>
+        </section>
+      </div>
+
+      <!-- ======== LOWER PANELS ======== -->
+      <div class="lower">
+        <section class="card panel" aria-label="進行中の仕事">
+          <h2>進行中の仕事</h2>
+          <ul>
+            <li><span class="tag wait">実機確認待ち</span><span>工事管理システム REV.148<small>交付済み。他者編集中の赤字警告つき</small></span></li>
+            <li><span class="tag wait">実機確認待ち</span><span>スマホ修正版11<small>Indexのみ差し替え。デプロイ待ち</small></span></li>
+            <li><span class="tag wait">承認待ち</span><span>今日の機構 #2 ラチェット機構<small>下書き作成済み。投稿は2日に1回が目安</small></span></li>
+            <li><span class="tag go">進行中</span><span>FR5 × スキャン検証<small>「掴む→ピンに差す」は実機で通過。カップ微調整が残り</small></span></li>
+            <li><span class="tag done">交付済み</span><span>StepToDxf v1.34<small>部品一覧CSVの合算化などを修正</small></span></li>
+          </ul>
+        </section>
+
+        <section class="card panel" aria-label="この試作でできること">
+          <h2>この試作でできること</h2>
+          <p>姿は <b>同心円のリング</b> です（ロボットの絵は当面お休み）。三重の輪は呼吸するようにゆっくり膨らんだり縮んだりし、線自体も太くなったり細くなったりします。輪ごとにタイミングがずれているので、機械的な点滅ではなく生きているような動きになります。状態（待機中・聞き取り中・考え中・応答中）で、<b>輪の色と呼吸の速さ</b> が変わります（待機中はゆっくり、聞き取り中は少し速く）。マイクがオンの間は、<b>話している間は輪がその場で膨らみ、線も太く</b>なります。静かになると、ゆっくり呼吸の動きに戻ります。こちらが読み上げている間は、話すリズムに合わせた動きになります。</p>
+          <p style="margin-top:10px;">声で話しかけると声で返します（対応ブラウザのみ）。返事の声は、頭脳のキーが設定されていれば <b>OpenAIの自然な声</b> で読み上げます（「頭脳の設定」で声を選べます）。キーが無い時や通信が切れた時は、ブラウザーの標準の声に自動で戻ります。マイクボタンはオン・オフ式で、オンの間は聞き取りを続け、言葉が1秒途切れたら返事をし、返事が終わるとまた聞き取りに戻ります。「終わり」「終了」「マイクオフ」「ありがとう」だけを言うとマイクが閉じます。ただし今の表示（Museの画面の内側）ではマイクの許可が内側まで渡らず、声を拾えないことがあります。その場合は理由を画面に出し、文字入力とキーボードのマイクへ案内します（何度押しても開始を繰り返さないようになりました）。</p>
+          <p style="margin-top:10px;">文字では、時刻・日付・進行中の仕事に加えて、<b>計算</b>（「12×34は？」「200の15%は？」、単位の換算も）、<b>タイマー</b>（「3分タイマー」）、<b>メモ</b>（「メモして：○○」／「メモを見せて」）、<b>会社と採用の案内</b>にも答えられるようになりました。決まった型に当たらない自由な質問は、<b>頭脳（OpenAI API）</b>が答えます。コンソールの「頭脳の設定」からAPIキーを入れてください（キーはこのPCの中にだけ保存され、OpenAI以外へは送りません）。会話の文脈は直近10往復まで保ちます。メールや予定、機械への接続は次の段階で足していきます。</p>
+        </section>
+
+        <section class="card panel" aria-label="話しかけ方の例">
+          <h2>話しかけ方の例</h2>
+          <ul class="cmdlist">
+            <li>「今何時？」「今日は何日？」</li>
+            <li>「進行中の仕事を教えて」</li>
+            <li>「工事管理システムの状況は？」</li>
+            <li>「インスタの状況は？」</li>
+            <li>「FR5の進み具合は？」</li>
+            <li>「StepToDxfはどうなった？」</li>
+            <li>「12×34は？」「200の15%は？」「3kmは何m？」</li>
+            <li>「12月25日は何曜日？」「12月25日まであと何日？」</li>
+            <li>「3分タイマー」「タイマーを止めて」</li>
+            <li>「メモして：○○」「メモを見せて」</li>
+            <li>「会社について教えて」「採用について教えて」</li>
+            <li>自由な質問全般（例：「FAって何の略？」）—「頭脳の設定」でキーを入れた場合</li>
+            <li>「おはよう」「ありがとう」</li>
+            <li>マイクを閉じる： 「終わり」「終了」「マイクオフ」「ありがとう」だけを言う</li>
+          </ul>
+        </section>
+      </div>
+
+      <div class="foot">PROTOTYPE 01 — SMALL FIRST STEP</div>
+    </div>
+
+    <script>
+      (function(){
+        "use strict";
+        var $ = function(id){ return document.getElementById(id); };
+        var log = $("log"), form = $("inputForm"), input = $("textInput"),
+            micBtn = $("micBtn"), stateLabel = $("stateLabel"), stateSub = $("stateSub"),
+            voiceToggle = $("voiceToggle"), voiceToggleState = $("voiceToggleState"),
+            ring1 = $("ring1"), ring2 = $("ring2"),
+            voiceNotice = $("voiceNotice"), voiceNoticeTitle = $("voiceNoticeTitle"),
+            voiceNoticeBody = $("voiceNoticeBody"), voiceNoticeClose = $("voiceNoticeClose"),
+            voiceRetry = $("voiceRetry"),
+            micLabel = $("micLabel");
+
+        var STATES = {
+          idle:     { label:"待機中",     sub:"お呼びでしょうか。話しかけてください。" },
+          listening:{ label:"聞き取り中", sub:"聞いています… 言葉が1秒途切れたら返事をします。閉じる時はもう一度マイクを押してください。" },
+          thinking: { label:"考え中",     sub:"少しお待ちください…" },
+          speaking: { label:"応答中",     sub:"お答えしています。" }
+        };
+        function setState(name){
+          document.body.setAttribute("data-state", name);
+          stateLabel.textContent = STATES[name].label;
+          stateSub.textContent = STATES[name].sub;
+          var fast = (name === "thinking");
+          if (ring1) ring1.classList.toggle("fast", fast);
+          if (ring2) ring2.classList.toggle("fast", fast);
+          if (typeof levelStateHook === "function") levelStateHook(name);
+        }
+
+        /* ---------- clock ---------- */
+        var WD = ["日","月","火","水","木","金","土"];
+        function pad(n){ return (n < 10 ? "0" : "") + n; }
+        function tick(){
+          var d = new Date();
+          $("dateLabel").textContent = d.getFullYear() + "/" + pad(d.getMonth()+1) + "/" + pad(d.getDate()) + " (" + WD[d.getDay()] + ")";
+          $("clock").innerHTML = pad(d.getHours()) + ":" + pad(d.getMinutes()) + '<span class="sec">:' + pad(d.getSeconds()) + "</span>";
+        }
+        tick(); setInterval(tick, 1000);
+
+        /* ---------- conversation ---------- */
+        var voiceOn = true;
+        voiceToggle.addEventListener("click", function(){
+          voiceOn = !voiceOn;
+          voiceToggle.setAttribute("aria-pressed", voiceOn ? "true" : "false");
+          voiceToggleState.textContent = voiceOn ? "ON" : "OFF";
+          if (!voiceOn){
+            /* Stop whichever voice is playing: TTS audio and/or
+               the browser fallback voice. */
+            try{ if (typeof Voice !== "undefined" && Voice && Voice.stop) Voice.stop(); }catch(e){}
+            if ("speechSynthesis" in window) speechSynthesis.cancel();
+          }
+        });
+
+        function addMsg(cls, who, text){
+          var div = document.createElement("div");
+          div.className = "msg " + cls;
+          var w = document.createElement("span");
+          w.className = "who"; w.textContent = who;
+          div.appendChild(w);
+          div.appendChild(document.createTextNode(text));
+          log.appendChild(div);
+          log.scrollTop = log.scrollHeight;
+          return div;
+        }
+        function addNote(text){
+          var div = document.createElement("div");
+          div.className = "msg note";
+          var w = document.createElement("span");
+          w.className = "who"; w.textContent = "VOICE INPUT";
+          div.appendChild(w);
+          div.appendChild(document.createTextNode(text));
+          log.appendChild(div);
+          log.scrollTop = log.scrollHeight;
+        }
+        /* Technical details for a brain failure, kept out of the
+           spoken reply: the reply states the reason in plain
+           Japanese, the raw detail lands here so it can be read
+           off the screen and reported back. */
+        function addDiagNote(text){
+          var div = document.createElement("div");
+          div.className = "msg note";
+          var w = document.createElement("span");
+          w.className = "who"; w.textContent = "BRAIN LOG";
+          div.appendChild(w);
+          var pre = document.createElement("div");
+          pre.style.cssText = "font-family:var(--mono); font-size:.74rem; line-height:1.6; word-break:break-all; opacity:.9;";
+          pre.textContent = text;
+          div.appendChild(pre);
+          log.appendChild(div);
+          log.scrollTop = log.scrollHeight;
+        }
+
+        /* Voice-log diagnostic note: TTS fallback reasons land here
+           ONCE per reason (see Voice.logDiagOnce), never repeatedly
+           in the conversation, and the conversation itself is never
+           interrupted by them. */
+        function addVoiceDiagNote(text){
+          var div = document.createElement("div");
+          div.className = "msg note";
+          var w = document.createElement("span");
+          w.className = "who"; w.textContent = "VOICE LOG";
+          div.appendChild(w);
+          var pre = document.createElement("div");
+          pre.style.cssText = "font-family:var(--mono); font-size:.74rem; line-height:1.6; word-break:break-all; opacity:.9;";
+          pre.textContent = text;
+          div.appendChild(pre);
+          log.appendChild(div);
+          log.scrollTop = log.scrollHeight;
+        }
+
+        /* Browser built-in voice — now only the FALLBACK path, used
+           when the OpenAI TTS path cannot run (no key, TTS error,
+           network failure). Kept as its own function so Voice can
+           drop down to it without stopping the conversation. */
+        function speakBrowser(text, done){
+          if (!voiceOn || !("speechSynthesis" in window)){ if (done) done(); return; }
+          try{
+            /* Cancel only when something is actually playing or
+               queued: an unconditional cancel() in the same task can
+               swallow the utterance queued right after it on iOS,
+               which silently ate the spoken reply. */
+            try{ if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel(); }catch(e){}
+            /* A previous cancel can leave synthesis paused on some
+               browsers; a paused synthesizer queues the reply and
+               never speaks it, so resume explicitly before speaking. */
+            try{ if (speechSynthesis.paused) speechSynthesis.resume(); }catch(e){}
+            var u = new SpeechSynthesisUtterance(text);
+            u.lang = "ja-JP"; u.rate = 1.02; u.pitch = 0.92;
+            var vs = speechSynthesis.getVoices(), i;
+            for (i = 0; i < vs.length; i++){ if (vs[i].lang && vs[i].lang.indexOf("ja") === 0){ u.voice = vs[i]; break; } }
+            var finished = false;
+            var finish = function(){ if (!finished){ finished = true; if (done) done(); } };
+            u.onend = finish; u.onerror = finish;
+            setTimeout(finish, Math.max(2500, text.length * 220));
+            speechSynthesis.speak(u);
+          }catch(e){ if (done) done(); }
+        }
+        if ("speechSynthesis" in window){ speechSynthesis.getVoices(); }
+
+        /* Main speak entry point used by the whole page. Delegates
+           to the Voice module (OpenAI TTS, defined further down next
+           to Brain); Voice itself falls back to speakBrowser when
+           TTS cannot run. If Voice is somehow unavailable, go
+           straight to the browser voice — a reply must never be
+           lost because speech failed. */
+        function speak(text, done){
+          if (typeof Voice !== "undefined" && Voice && Voice.speak){
+            Voice.speak(text, done);
+          } else {
+            speakBrowser(text, done);
+          }
+        }
+
+        /* iOS Safari silently drops speechSynthesis.speak() calls
+           that were never unlocked by a user gesture, so replies
+           composed later (from timers / recognition events) may
+           never be heard even though they appear as text. Speaking
+           a silent utterance inside the gesture handlers unlocks
+           speech output for the rest of the session. This must run
+           in EVERY gesture path that can lead to a spoken reply —
+           including the mic-ON tap, which is the main voice path:
+           without the unlock there, a voice question got a text
+           reply but no voice. The utterance text must be a real
+           character: a whitespace-only utterance is treated as
+           empty by some engines and never enqueued, so the unlock
+           never happened. */
+        function primeSpeech(){
+          /* Unlock the TTS audio player inside the same user
+             gesture (mic-ON tap etc.), so the first OpenAI voice
+             reply — composed later, outside any gesture — is not
+             dropped by the browser's autoplay policy, especially
+             on iOS. */
+          try{ if (typeof Voice !== "undefined" && Voice && Voice.primeAudio) Voice.primeAudio(); }catch(e){}
+          if (!voiceOn || !("speechSynthesis" in window)) return;
+          try{
+            if (speechSynthesis.speaking || speechSynthesis.pending) return;
+            try{ if (speechSynthesis.paused) speechSynthesis.resume(); }catch(e){}
+            var u = new SpeechSynthesisUtterance("あ");
+            u.volume = 0; u.lang = "ja-JP";
+            speechSynthesis.speak(u);
+          }catch(e){}
+        }
+
+        /* ---------- brain (fixed patterns, widened) ----------
+           Still a local, fixed-pattern brain — but no longer limited
+           to the example buttons: it also does arithmetic, percent
+           and unit conversion, date arithmetic, timers and session
+           memos, and answers about the company and hiring. Anything
+           outside these patterns gets an honest reply that names
+           what it CAN do, instead of a dead end. */
+        var timers = [], memos = [];
+        /* Conversation history for the brain: user/assistant pairs,
+           kept in memory only (this session), trimmed when sent. */
+        var history = [];
+        function pushHistory(u, a){
+          history.push({ role: "user", content: u });
+          history.push({ role: "assistant", content: a });
+          if (history.length > 40) history = history.slice(history.length - 40);
+        }
+        function fmtNum(n){
+          if (!isFinite(n)) return String(n);
+          var r = Math.round(n * 1000000) / 1000000;
+          return String(r);
+        }
+        /* Tiny hand-written evaluator (no eval): + - * / with
+           * and / binding tighter, left to right otherwise. */
+        function calcExpr(expr){
+          var tokens = expr.match(/\d+(?:\.\d+)?|[+\-*/]/g);
+          if (!tokens || tokens.length < 3 || tokens.length % 2 === 0) return null;
+          var vals = [parseFloat(tokens[0])], ops = [], i;
+          if (isNaN(vals[0])) return null;
+          for (i = 1; i < tokens.length; i += 2){
+            if ("+-*/".indexOf(tokens[i]) < 0) return null;
+            var num = parseFloat(tokens[i + 1]);
+            if (isNaN(num)) return null;
+            ops.push(tokens[i]); vals.push(num);
+          }
+          var v2 = [vals[0]], o2 = [];
+          for (i = 0; i < ops.length; i++){
+            if (ops[i] === "*" || ops[i] === "/"){
+              var a = v2.pop();
+              v2.push(ops[i] === "*" ? a * vals[i + 1] : a / vals[i + 1]);
+            } else { o2.push(ops[i]); v2.push(vals[i + 1]); }
+          }
+          var res = v2[0];
+          for (i = 0; i < o2.length; i++) res = (o2[i] === "+") ? res + v2[i + 1] : res - v2[i + 1];
+          return res;
+        }
+        function timerLabel(ms){
+          if (ms % 3600000 === 0) return (ms / 3600000) + "時間";
+          if (ms % 60000 === 0) return (ms / 60000) + "分";
+          if (ms % 1000 === 0) return (ms / 1000) + "秒";
+          return Math.round(ms / 1000) + "秒";
+        }
+        function answer(q){
+          var t = q.replace(/\s+/g, "");
+          var d = new Date();
+          /* --- timers (before the clock branch: 「1時間タイマー」
+             contains 時間 and must not be read as "what time") --- */
+          if (/タイマー/.test(t)){
+            if (/止め|キャンセル|取消|やめ/.test(t)){
+              if (timers.length){
+                for (var ti = 0; ti < timers.length; ti++) clearTimeout(timers[ti]);
+                timers = [];
+                return "タイマーを全部止めました。";
+              }
+              return "今、動いているタイマーはありません。";
+            }
+            var tm = t.match(/(\d+(?:\.\d+)?)(時間|分|秒)/);
+            if (tm){
+              var tms = parseFloat(tm[1]) * (tm[2] === "時間" ? 3600000 : (tm[2] === "分" ? 60000 : 1000));
+              if (tms >= 1000 && tms <= 2 * 3600000){
+                var lbl = timerLabel(tms);
+                var tid = setTimeout(function(){
+                  timers = timers.filter(function(x){ return x !== tid; });
+                  var msgT = "時間です。" + lbl + "が経ちました。";
+                  addMsg("ai", "MYU", msgT);
+                  setState("speaking");
+                  speak(msgT, function(){ setState("idle"); });
+                  if (!voiceOn || !("speechSynthesis" in window)) setTimeout(function(){ setState("idle"); }, 1200);
+                }, tms);
+                timers.push(tid);
+                return lbl + "のタイマーをセットしました。時間が来たら、この画面でお知らせします（画面を開いたままにしてください）。止める時は「タイマーを止めて」と言ってください。";
+              }
+              return "タイマーは1秒から2時間までの間でお願いします。";
+            }
+            return "「3分タイマー」のように、長さと一緒に言ってください。";
+          }
+          /* --- session memos (this screen only, kept in memory) --- */
+          if (/メモ/.test(t) && /見せ|一覧|何が|リスト/.test(t)){
+            if (!memos.length) return "メモはまだありません。「メモして：○○」と言っていただければ、この画面を開いている間だけ覚えます。";
+            var ml = "メモは" + memos.length + "件です。";
+            for (var mi = 0; mi < memos.length; mi++) ml += "\n" + (mi + 1) + ". " + memos[mi];
+            return ml;
+          }
+          if (/メモ/.test(t) && /消し|削除|クリア|全部消/.test(t)){
+            memos = [];
+            return "メモを全部消しました。";
+          }
+          if (/^メモ/.test(t)){
+            var mc = t.replace(/^メモ(して|に|する)?/, "").replace(/^[：:、,]/, "");
+            if (mc){
+              memos.push(mc);
+              return "メモしました。「" + mc + "」（メモは" + memos.length + "件です。この画面を開いている間だけ覚えています）";
+            }
+            return "「メモして：○○」のように、覚える内容も一緒に言ってください。";
+          }
+          /* --- arithmetic / percent / unit conversion --- */
+          var ct = t.replace(/[０-９]/g, function(ch){ return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); })
+                    .replace(/×|✕|＊/g, "*").replace(/÷|／/g, "/")
+                    .replace(/＋/g, "+").replace(/－|−/g, "-")
+                    .replace(/かける|掛ける/g, "*").replace(/わる|割る/g, "/")
+                    .replace(/たす|足す/g, "+").replace(/ひく|引く/g, "-");
+          var pm = ct.match(/(\d+(?:\.\d+)?)の(\d+(?:\.\d+)?)(%|パーセント)/);
+          if (pm){
+            return pm[1] + "の" + pm[2] + "%は " + fmtNum(parseFloat(pm[1]) * parseFloat(pm[2]) / 100) + " です。";
+          }
+          var wm = ct.match(/(\d+(?:\.\d+)?)の(\d+(?:\.\d+)?)割/);
+          if (wm){
+            return wm[1] + "の" + wm[2] + "割は " + fmtNum(parseFloat(wm[1]) * parseFloat(wm[2]) / 10) + " です。";
+          }
+          var conv = [
+            [/(\d+(?:\.\d+)?)(?:km|キロメートル)(?:は|を|って)?何?(?:m|メートル)/, 1000, "m"],
+            [/(\d+(?:\.\d+)?)(?:m|メートル)(?:は|を|って)?何?(?:cm|センチ)/, 100, "cm"],
+            [/(\d+(?:\.\d+)?)(?:cm|センチ)(?:は|を|って)?何?(?:mm|ミリ)/, 10, "mm"],
+            [/(\d+(?:\.\d+)?)(?:kg|キログラム)(?:は|を|って)?何?(?:g|グラム)/, 1000, "g"],
+            [/(\d+(?:\.\d+)?)時間(?:は|を|って)?何?分/, 60, "分"],
+            [/(\d+(?:\.\d+)?)分(?:は|を|って)?何?秒/, 60, "秒"]
+          ];
+          for (var ci = 0; ci < conv.length; ci++){
+            var cm2 = ct.match(conv[ci][0]);
+            if (cm2) return cm2[1] + " は " + fmtNum(parseFloat(cm2[1]) * conv[ci][1]) + conv[ci][2] + " です。";
+          }
+          var fm = ct.match(/(-?\d+(?:\.\d+)?)度(?:は|って)?(?:何度|華氏|℉)/);
+          if (fm){
+            return fm[1] + "度（摂氏）は華氏で " + fmtNum(parseFloat(fm[1]) * 9 / 5 + 32) + " 度です。";
+          }
+          var em = ct.match(/\d+(?:\.\d+)?\s*[+\-*/]\s*\d+(?:\.\d+)?(?:\s*[+\-*/]\s*\d+(?:\.\d+)?)*/);
+          if (em){
+            var er = calcExpr(em[0].replace(/\s+/g, ""));
+            if (er !== null && isFinite(er)){
+              return em[0].replace(/\*/g, "×").replace(/\//g, "÷") + " = " + fmtNum(er) + " です。";
+            }
+          }
+          if (/計算/.test(t)){
+            return "計算できます。「12×34は？」「200の15%は？」「3kmは何m？」のように聞いてください。足し算・引き算・掛け算・割り算と、簡単な換算に対応しています。";
+          }
+          /* --- specific dates (before the generic date branch) --- */
+          var dm = t.match(/(\d{1,2})月(\d{1,2})日/);
+          if (dm && /何曜日|あと何日|まで何日|何日ある|何日後/.test(t)){
+            var tg = new Date(d.getFullYear(), parseInt(dm[1], 10) - 1, parseInt(dm[2], 10));
+            if (/何曜日/.test(t)){
+              return dm[1] + "月" + dm[2] + "日は" + WD[tg.getDay()] + "曜日です。";
+            }
+            var today0 = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            var diff = Math.round((tg - today0) / 86400000);
+            if (diff < 0){
+              tg = new Date(d.getFullYear() + 1, tg.getMonth(), tg.getDate());
+              diff = Math.round((tg - today0) / 86400000);
+            }
+            if (diff === 0) return dm[1] + "月" + dm[2] + "日は今日です。";
+            return dm[1] + "月" + dm[2] + "日まで、あと" + diff + "日です。";
+          }
+          if (/明後日|あさって/.test(t)){
+            var ad = new Date(d.getTime() + 2 * 86400000);
+            return "明後日は" + (ad.getMonth() + 1) + "月" + ad.getDate() + "日、" + WD[ad.getDay()] + "曜日です。";
+          }
+          if (/昨日|きのう/.test(t)){
+            var yd = new Date(d.getTime() - 86400000);
+            return "昨日は" + (yd.getMonth() + 1) + "月" + yd.getDate() + "日、" + WD[yd.getDay()] + "曜日でした。";
+          }
+          if (/何時|時刻|じかん|時間/.test(t)){
+            return "現在、" + d.getHours() + "時" + d.getMinutes() + "分です。";
+          }
+          if (/何日|何曜日|日付|きょう|今日|あした|明日/.test(t)){
+            if (/明日|あした/.test(t)){
+              var tm = new Date(d.getTime() + 86400000);
+              return "明日は" + (tm.getMonth()+1) + "月" + tm.getDate() + "日、" + WD[tm.getDay()] + "曜日です。";
+            }
+            return "今日は" + d.getFullYear() + "年" + (d.getMonth()+1) + "月" + d.getDate() + "日、" + WD[d.getDay()] + "曜日です。";
+          }
+          if (/工事管理|REV|れぶ/.test(t)){
+            return "工事管理システムはREV.148が交付済みで、実機確認待ちです。他の方が編集中のときは、赤字で警告が出るようになりました。スマホ側は修正版11がデプロイ待ちです。";
+          }
+          if (/インスタ|instagram|機構|投稿|ラチェット/i.test(t)){
+            return "Instagramは「今日の機構 #2 ラチェット機構」の下書きができていて、承認待ちです。投稿のペースは2日に1回が目安になっています。";
+          }
+          if (/FR5|ロボット|スキャン|スキャナー|POP4|Trackit/i.test(t)){
+            return "FR5の検証は、「探す、掴む、ピンに差す」まで実機で通っています。残っているのはカップの微調整です。スキャナーを載せる検証も、別件として進めています。";
+          }
+          if (/StepToDxf|ステップ|DXF|図面変換/i.test(t)){
+            return "StepToDxfはv1.34が交付済みです。部品一覧CSVが合算されるようになり、「以後はすべて自動」が残ってしまう不具合も直っています。";
+          }
+          if (/会社|エムアール|MRエンジニアリング|どんな会社/.test(t) && !/工事管理|システム/.test(t)){
+            return "エムアールエンジニアリング株式会社は、大分県杵築市猪尾にあるFAメーカーです。装置の設計から組立まで手がけていて、機械設計・電気設計／制御設計・装置組立・営業の仲間を募集しています。「採用について」と聞いていただければ、募集の内容をお答えします。";
+          }
+          if (/採用|求人|募集|スタッフ募集|働き/.test(t)){
+            return "採用は、機械設計・電気設計／制御設計・装置組立・営業を募集しています。正社員で月給19万円〜40万円（電気・制御設計は経験者の募集で25万円〜40万円）、勤務地は大分県杵築市猪尾、8時〜17時・週休2日です。未経験の方も相談できます。興味があれば少しずつ覚えていけますし、丁寧にお教えします。";
+          }
+          if (/メール|予定|カレンダー|スケジュール/.test(t)){
+            return "すみません、メールと予定への接続はまだつないでいません。次の段階で足す予定です。今は時刻・日付・進行中の仕事・計算・タイマー・メモにお答えできます。";
+          }
+          if (/仕事|案件|進捗|状況|タスク|やること/.test(t)){
+            return "進行中の主なものは4つです。工事管理システムREV.148とスマホ修正版11が実機確認待ち、「今日の機構 #2」が承認待ち、FR5はカップの微調整が残っています。StepToDxf v1.34は交付済みです。";
+          }
+          if (/自己紹介|名前|だれ|誰|あなたは/.test(t)){
+            return "私はmyuです。丸山さんの仕事を手伝うアシスタントで、この画面はその試作1号です。姿は同心円のリングで、状態によって色と明滅の速さが変わります。";
+          }
+          if (/おはよう/.test(t)){ return "おはようございます、丸山さん。今日もよろしくお願いします。何から始めましょうか。"; }
+          if (/こんにちは/.test(t)){ return "こんにちは、丸山さん。何かお手伝いしましょうか。"; }
+          if (/こんばんは/.test(t)){ return "こんばんは、丸山さん。お疲れさまです。"; }
+          if (/ありがとう/.test(t)){ return "どういたしまして。いつでも声をかけてください。"; }
+          if (/おやすみ/.test(t)){ return "おやすみなさい、丸山さん。今日もお疲れさまでした。"; }
+          if (/できること|使い方|ヘルプ|help/i.test(t)){
+            return "今の試作でできるのは、時刻・日付（「12月25日は何曜日？」のような日付計算も）、進行中の仕事の報告、計算（四則・割合・単位換算）、タイマー（「3分タイマー」）、メモ（「メモして：○○」）、会社と採用の案内です。それ以外の自由な質問は、「頭脳の設定」でOpenAI APIキーを入れると頭脳が答えます。下のボタンからも試せます。メールや予定との接続は、次の段階で足していきます。";
+          }
+          if (/天気/.test(t)){
+            return "すみません、天気の取得はまだつないでいません。次の段階で足す候補に入れておきます。";
+          }
+          /* No fixed pattern matched: return null so ask() hands
+             the question to the brain (OpenAI API) instead of
+             dead-ending here. */
+          return null;
+        }
+
+        /* =========================================================
+           Brain settings (the panel in the console head).
+           ========================================================= */
+        var settingsPanel = $("settingsPanel"), settingsToggle = $("settingsToggle"),
+            settingsState = $("settingsState"), apiKeyInput = $("apiKeyInput"),
+            modelSelect = $("modelSelect"), keyStatus = $("keyStatus"),
+            keySaveBtn = $("keySave"), keyClearBtn = $("keyClear"),
+            voiceSelect = $("voiceSelect"), voiceTestBtn = $("voiceTest"),
+            voiceTestStatus = $("voiceTestStatus");
+        function openSettings(focusKey){
+          if (settingsPanel) settingsPanel.hidden = false;
+          if (settingsToggle) settingsToggle.setAttribute("aria-expanded", "true");
+          if (focusKey && apiKeyInput && !micOn){
+            try{ apiKeyInput.focus(); }catch(e){}
+          }
+        }
+        function closeSettings(){
+          if (settingsPanel) settingsPanel.hidden = true;
+          if (settingsToggle) settingsToggle.setAttribute("aria-expanded", "false");
+        }
+        function refreshSettingsUI(){
+          var has = Brain.hasKey();
+          if (settingsState) settingsState.textContent = has ? "設定済み" : "未設定";
+          if (settingsToggle) settingsToggle.setAttribute("aria-pressed", has ? "true" : "false");
+          if (modelSelect) modelSelect.value = Brain.getModel();
+          if (voiceSelect && typeof Voice !== "undefined" && Voice) voiceSelect.value = Voice.getVoice();
+          if (apiKeyInput) apiKeyInput.placeholder = has ? "設定済み（変える時だけ入力してください）" : "sk-...";
+          if (keyStatus){
+            keyStatus.textContent = has
+              ? (Brain.storageOK() ? "キー：設定済み" : "キー：設定済み（この表示では保存できないため、開いている間だけ保持します）")
+              : "キー：未設定";
+          }
+        }
+        if (settingsToggle){
+          settingsToggle.addEventListener("click", function(){
+            if (settingsPanel && settingsPanel.hidden) openSettings(false);
+            else closeSettings();
+          });
+        }
+        if (keySaveBtn){
+          keySaveBtn.addEventListener("click", function(){
+            var v = apiKeyInput ? (apiKeyInput.value || "").trim() : "";
+            if (v){
+              Brain.setKey(v);
+              if (apiKeyInput) apiKeyInput.value = "";
+            }
+            refreshSettingsUI();
+            if (!v && !Brain.hasKey() && keyStatus) keyStatus.textContent = "キーが入力されていません。";
+          });
+        }
+        if (keyClearBtn){
+          keyClearBtn.addEventListener("click", function(){
+            Brain.setKey("");
+            if (apiKeyInput) apiKeyInput.value = "";
+            refreshSettingsUI();
+          });
+        }
+        if (modelSelect){
+          modelSelect.addEventListener("change", function(){
+            Brain.setModel(modelSelect.value);
+            refreshSettingsUI();
+          });
+        }
+        if (voiceSelect){
+          voiceSelect.addEventListener("change", function(){
+            if (typeof Voice !== "undefined" && Voice) Voice.setVoice(voiceSelect.value);
+            if (voiceTestStatus) voiceTestStatus.textContent = "";
+          });
+        }
+        if (voiceTestBtn){
+          voiceTestBtn.addEventListener("click", function(){
+            /* The tap itself is the user gesture that unlocks
+               audio playback for this test and later replies. */
+            primeSpeech();
+            if (!Brain.hasKey()){
+              if (voiceTestStatus) voiceTestStatus.textContent = "キーが未設定のため、自然な声のテストはできません。キーを保存してからお試しください。";
+              return;
+            }
+            if (typeof Voice === "undefined" || !Voice) return;
+            if (voiceTestStatus) voiceTestStatus.textContent = "声を作っています…";
+            var prevState = document.body.getAttribute("data-state");
+            setState("speaking");
+            Voice.test(function(ok, fellBack){
+              setState(prevState === "speaking" ? "idle" : (prevState || "idle"));
+              if (voiceTestStatus){
+                voiceTestStatus.textContent = fellBack
+                  ? "OpenAIの声を作れなかったため、ブラウザーの声で再生しました（理由は VOICE LOG に記録）。"
+                  : "テスト再生が終わりました。これが選んだ声です。";
+              }
+            });
+          });
+        }
+
+        /* =========================================================
+           Brain connection — the ONE place that talks to the AI
+           brain, so it can be swapped later (e.g. to the Claude
+           API) by rewriting only this block: endpoint, headers
+           and response parsing. The rest of the page only calls
+           Brain.ask(text, history, cb) and never touches the
+           network itself.
+           The key lives only in this browser (localStorage, with
+           an in-memory fallback when storage is unavailable, e.g.
+           inside a sandboxed frame) and is sent only to OpenAI.
+           ========================================================= */
+        var Brain = (function(){
+          var ENDPOINT = "https://api.openai.com/v1/chat/completions";
+          var LS_KEY = "emu.openai.apiKey", LS_MODEL = "emu.openai.model";
+          var memKey = "", memModel = "gpt-4o", storageOK = true;
+          function lsGet(k){
+            try{ return window.localStorage.getItem(k); }
+            catch(e){ storageOK = false; return null; }
+          }
+          function lsSet(k, v){
+            try{ window.localStorage.setItem(k, v); }
+            catch(e){ storageOK = false; }
+          }
+          function lsDel(k){
+            try{ window.localStorage.removeItem(k); }
+            catch(e){ storageOK = false; }
+          }
+          /* Probe storage once, so the settings panel can say
+             honestly whether the key will persist. */
+          lsGet(LS_KEY);
+          function getKey(){
+            var v = lsGet(LS_KEY);
+            return (v !== null && v !== undefined && v !== "") ? v : memKey;
+          }
+          function setKey(k){
+            memKey = k || "";
+            if (memKey) lsSet(LS_KEY, memKey); else lsDel(LS_KEY);
+          }
+          function getModel(){
+            var v = lsGet(LS_MODEL);
+            var m = v || memModel || "gpt-4o";
+            return (m === "gpt-4o-mini") ? "gpt-4o-mini" : "gpt-4o";
+          }
+          function setModel(m){
+            memModel = (m === "gpt-4o-mini") ? "gpt-4o-mini" : "gpt-4o";
+            lsSet(LS_MODEL, memModel);
+          }
+          function hasKey(){ return !!getKey(); }
+
+          var SYSTEM_PROMPT =
+            "あなたは「えむ」という名前の音声アシスタントです。エムアールエンジニアリング株式会社の丸山さんの仕事を手伝う存在です。\n" +
+            "必ず日本語で答えてください。答えは声で読み上げられますので、読み上げても自然な短い文章にしてください（原則2〜3文まで）。箇条書きや記号の多用は避けてください。\n" +
+            "分からないことは、正直に「分かりません」と答えてください。知ったかぶりや作り話はしないでください。\n" +
+            "相手は丸山さんです。丁寧で落ち着いた話し方をしてください。";
+
+          /* cb(replyText, diagTextOrNull) — called exactly once.
+             The reply text always states the outcome in plain
+             Japanese; technical detail goes to the diag note. */
+          function ask(text, hist, cb){
+            var key = getKey();
+            if (!key){
+              openSettings(true);
+              cb("頭脳のキーが未設定です。設定からOpenAI APIキーを入れてください。キーを入れていただければ、自由な質問にもお答えできるようになります。", null);
+              return;
+            }
+            var msgs = [{ role: "system", content: SYSTEM_PROMPT }];
+            var tail = hist.slice(-20); /* last 10 exchanges */
+            for (var i = 0; i < tail.length; i++) msgs.push(tail[i]);
+            msgs.push({ role: "user", content: text });
+            var ctrl = ("AbortController" in window) ? new AbortController() : null;
+            var to = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, 45000) : null;
+            var reqOpts = {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + key
+              },
+              body: JSON.stringify({ model: getModel(), messages: msgs })
+            };
+            if (ctrl) reqOpts.signal = ctrl.signal;
+            fetch(ENDPOINT, reqOpts).then(function(res){
+              if (to) clearTimeout(to);
+              return res.text().then(function(bodyText){
+                var data = null;
+                try{ data = JSON.parse(bodyText); }catch(e){}
+                if (res.ok && data && data.choices && data.choices[0] && data.choices[0].message){
+                  var content = String(data.choices[0].message.content || "").trim();
+                  cb(content || "すみません、うまく答えられませんでした。もう一度聞いてください。", null);
+                  return;
+                }
+                var diag = "POST " + ENDPOINT + " / model: " + getModel() + " / HTTP " + res.status + " / " + String(bodyText).slice(0, 300);
+                if (res.status === 401){
+                  cb("APIキーが違うか、無効になっているようです。設定でキーをご確認ください。", diag);
+                } else if (res.status === 429){
+                  cb("OpenAI側の利用上限に達しているようです。少し時間をおいてから、もう一度お試しください。クレジット残高の不足でも同じエラーになることがあります。", diag);
+                } else if (res.status === 400){
+                  cb("OpenAI側でリクエストを受け付けられませんでした。設定のモデルをご確認ください。", diag);
+                } else {
+                  cb("OpenAIからエラーが返りました（HTTP " + res.status + "）。少し時間をおいてからお試しください。", diag);
+                }
+              });
+            }).catch(function(err){
+              if (to) clearTimeout(to);
+              var name = (err && err.name) ? String(err.name) : "Error";
+              if (name === "AbortError"){
+                cb("頭脳からの返事が時間内に来ませんでした。通信の状態をご確認のうえ、もう一度お試しください。", "timeout: 45秒以内に応答がありませんでした");
+              } else {
+                cb("頭脳へ通信できませんでした。ネット接続をご確認のうえ、もう一度お試しください。", "fetch: " + name + (err && err.message ? " / " + err.message : ""));
+              }
+            });
+          }
+          return {
+            ask: ask, getKey: getKey, setKey: setKey,
+            getModel: getModel, setModel: setModel, hasKey: hasKey,
+            storageOK: function(){ return storageOK; }
+          };
+        })();
+
+        /* =========================================================
+           Voice connection — the ONE place that talks to the
+           speech service (OpenAI TTS), mirroring Brain above, so
+           the voice provider can be swapped later by rewriting
+           only this block. The rest of the page only calls
+           Voice.speak(text, done) / Voice.test(cb) / Voice.stop()
+           / Voice.primeAudio().
+
+           Main path: POST /v1/audio/speech with the SAME API key
+           as the brain, model tts-1, mp3. The reply text is split
+           into sentences; each sentence is synthesised and played
+           in order, with the next sentence fetched while the
+           current one plays, so the voice starts as early as the
+           first sentence is ready. Playback uses ONE persistent
+           <audio> element, primed inside user gestures (see
+           primeAudio) so later, gesture-less playback is allowed.
+
+           Fallback: no key, a TTS error, or a network failure
+           drops the REMAINING text to the browser's built-in
+           voice (speakBrowser) so the conversation never stalls.
+           The reason is written to the VOICE LOG once per reason
+           — it never repeats in the conversation itself.
+           ========================================================= */
+        var Voice = (function(){
+          var ENDPOINT = "https://api.openai.com/v1/audio/speech";
+          var MODEL = "tts-1";
+          var LS_VOICE = "emu.openai.voice";
+          var VOICES = ["nova", "shimmer", "alloy", "onyx"];
+          var memVoice = "nova";
+          var vStorageOK = true;
+          function lsGet(k){
+            try{ return window.localStorage.getItem(k); }
+            catch(e){ vStorageOK = false; return null; }
+          }
+          function lsSet(k, v){
+            try{ window.localStorage.setItem(k, v); }
+            catch(e){ vStorageOK = false; }
+          }
+          lsGet(LS_VOICE);
+          function getVoice(){
+            var v = lsGet(LS_VOICE) || memVoice || "nova";
+            for (var i = 0; i < VOICES.length; i++) if (VOICES[i] === v) return v;
+            return "nova";
+          }
+          function setVoice(v){
+            memVoice = "nova";
+            for (var i = 0; i < VOICES.length; i++) if (VOICES[i] === v) memVoice = v;
+            lsSet(LS_VOICE, memVoice);
+          }
+
+          /* --- one persistent player, primed by user gestures --- */
+          var player = document.createElement("audio");
+          player.preload = "auto";
+          var silentUrl = null;
+          function getSilentUrl(){
+            if (silentUrl) return silentUrl;
+            /* A 0.1s silent WAV, built in code (no asset needed),
+               played inside a gesture to unlock audio output. */
+            var sr = 8000, n = Math.floor(sr * 0.1), bytes = 44 + n * 2;
+            var buf = new ArrayBuffer(bytes), dv = new DataView(buf);
+            function wstr(off, s){ for (var i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i)); }
+            wstr(0, "RIFF"); dv.setUint32(4, bytes - 8, true); wstr(8, "WAVEfmt ");
+            dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+            dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true); dv.setUint16(32, 2, true);
+            dv.setUint16(34, 16, true); wstr(36, "data"); dv.setUint32(40, n * 2, true);
+            silentUrl = URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+            return silentUrl;
+          }
+          function primeAudio(){
+            try{
+              if (player.ended || player.paused){
+                if (!player.src || player.src === "" || player.ended){
+                  player.src = getSilentUrl();
+                }
+                var p = player.play();
+                if (p && p.catch) p.catch(function(){});
+              }
+            }catch(e){}
+          }
+
+          /* --- fallback diagnostics: once per reason, VOICE LOG only --- */
+          var diagLogged = {};
+          function logDiagOnce(reason, detail){
+            if (diagLogged[reason]) return;
+            diagLogged[reason] = true;
+            addVoiceDiagNote(detail);
+          }
+
+          /* --- speech-only cleanup: the on-screen text is never
+             changed; only what is READ ALOUD is tidied — URLs and
+             markup symbols that would be read out literally are
+             dropped, and a few symbols get spoken forms. --- */
+          function sanitize(text){
+            var t = String(text || "");
+            t = t.replace(/https?:\/\/[^\s　]+/g, "");
+            t = t.replace(/www\.[^\s　]+/g, "");
+            t = t.replace(/[*#`>|_~]/g, "");
+            t = t.replace(/[「『]/g, "").replace(/[」』]/g, "");
+            t = t.replace(/%/g, "パーセント");
+            t = t.replace(/&/g, "と");
+            t = t.replace(/[/／]/g, "、");
+            t = t.replace(/[…―—]+/g, "、");
+            t = t.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "");
+            t = t.replace(/\s*\n+\s*/g, "。");
+            t = t.replace(/。+/g, "。").replace(/、+/g, "、");
+            t = t.replace(/^[。、\s]+/, "").trim();
+            return t;
+          }
+
+          /* Split into sentences, then group: the FIRST group is a
+             single sentence (fastest possible start); later groups
+             bundle up to ~90 chars so longer replies take fewer
+             requests. Over-long single sentences are cut at 、. */
+          function splitChunks(text){
+            var raw = text.match(/[^。！？]+[。！？]*/g) || [];
+            var sents = [];
+            for (var i = 0; i < raw.length; i++){
+              var s = raw[i].trim();
+              if (!s) continue;
+              while (s.length > 120){
+                var cut = s.lastIndexOf("、", 120);
+                if (cut < 40) cut = 120;
+                sents.push(s.slice(0, cut + (s.charAt(cut) === "、" ? 1 : 0)));
+                s = s.slice(cut + (s.charAt(cut) === "、" ? 1 : 0)).trim();
+              }
+              if (s) sents.push(s);
+            }
+            if (!sents.length) return [];
+            var chunks = [sents[0]], buf = "";
+            for (var j = 1; j < sents.length; j++){
+              if (buf && (buf + sents[j]).length > 90){ chunks.push(buf); buf = ""; }
+              buf += sents[j];
+            }
+            if (buf) chunks.push(buf);
+            return chunks;
+          }
+
+          var speakSeq = 0;      /* token: a newer speak/stop invalidates older async work */
+          var currentUrl = null; /* object URL of the chunk in the player */
+          function stop(){
+            speakSeq++;
+            try{ player.pause(); }catch(e){}
+            try{ player.removeAttribute("src"); player.load(); }catch(e){}
+            if (currentUrl){ try{ URL.revokeObjectURL(currentUrl); }catch(e){} currentUrl = null; }
+            if ("speechSynthesis" in window){ try{ speechSynthesis.cancel(); }catch(e){} }
+          }
+
+          function fetchChunk(text, key){
+            var ctrl = ("AbortController" in window) ? new AbortController() : null;
+            var to = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, 30000) : null;
+            var opts = {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + key
+              },
+              body: JSON.stringify({
+                model: MODEL, voice: getVoice(), input: text, response_format: "mp3"
+              })
+            };
+            if (ctrl) opts.signal = ctrl.signal;
+            return fetch(ENDPOINT, opts).then(function(res){
+              if (to) clearTimeout(to);
+              if (!res.ok){
+                return res.text().then(function(bodyText){
+                  var err = new Error("HTTP " + res.status);
+                  err.status = res.status;
+                  err.body = String(bodyText || "").slice(0, 300);
+                  throw err;
+                });
+              }
+              return res.blob();
+            }).catch(function(err){
+              if (to) clearTimeout(to);
+              throw err;
+            });
+          }
+
+          function playBlob(blob){
+            return new Promise(function(resolve, reject){
+              if (currentUrl){ try{ URL.revokeObjectURL(currentUrl); }catch(e){} }
+              currentUrl = URL.createObjectURL(blob);
+              var settled = false;
+              function cleanup(){
+                player.removeEventListener("ended", onEnd);
+                player.removeEventListener("error", onErr);
+              }
+              function onEnd(){ if (!settled){ settled = true; cleanup(); resolve(); } }
+              function onErr(){ if (!settled){ settled = true; cleanup(); reject(new Error("audio playback error")); } }
+              player.addEventListener("ended", onEnd);
+              player.addEventListener("error", onErr);
+              player.src = currentUrl;
+              var p = player.play();
+              if (p && p.catch) p.catch(function(e){ onErr(); });
+            });
+          }
+
+          /* Core routine. done(fellBack) is called exactly once.
+             force=true is for the settings "test" button: it speaks
+             even if the voice toggle is off. */
+          function speakInternal(text, done, force){
+            var finished = false;
+            var finish = function(fellBack){
+              if (finished) return;
+              finished = true;
+              if (done) done(fellBack === true);
+            };
+            if ((!voiceOn && !force)){
+              finish(false);
+              return;
+            }
+            var mySeq = ++speakSeq;
+            /* stop anything still playing from a previous reply */
+            try{ player.pause(); }catch(e){}
+            if ("speechSynthesis" in window){ try{ speechSynthesis.cancel(); }catch(e){} }
+
+            var cleaned = sanitize(text);
+            if (!cleaned){ finish(false); return; }
+
+            var key = Brain.getKey();
+            if (!key){
+              logDiagOnce("tts-nokey",
+                "OpenAI TTS: キーが未設定のため、ブラウザーの標準音声で読み上げました。");
+              speakBrowser(cleaned, function(){ finish(true); });
+              return;
+            }
+            var chunks = splitChunks(cleaned);
+            if (!chunks.length){ finish(false); return; }
+
+            /* Overall watchdog: if synthesis/playback ever stalls,
+               still release the caller so the session can move on
+               (back to listening) instead of hanging forever. */
+            var watchdog = setTimeout(function(){
+              if (mySeq === speakSeq) stop();
+              finish(false);
+            }, Math.max(20000, cleaned.length * 350 + 15000));
+            var guardedFinish = function(fb){
+              clearTimeout(watchdog);
+              finish(fb);
+            };
+
+            var fellBack = false;
+            function fallbackFrom(index, err){
+              fellBack = true;
+              var status = err && err.status ? ("HTTP " + err.status) : null;
+              var reasonKey = "tts-" + (status || (err && err.name) || "error");
+              var detail = "OpenAI TTS (" + MODEL + " / voice: " + getVoice() + "): " +
+                (status ? status : ((err && err.name) ? err.name : "Error")) +
+                (err && err.body ? " / " + err.body : (err && err.message ? " / " + err.message : "")) +
+                " — 残りはブラウザーの標準音声で読み上げました。";
+              if (status === "401"){
+                detail = "OpenAI TTS: APIキーが違うか無効なため、ブラウザーの標準音声で読み上げました。(HTTP 401)";
+              } else if (status === "429"){
+                detail = "OpenAI TTS: 利用上限または残高不足のため、ブラウザーの標準音声で読み上げました。(HTTP 429)";
+              }
+              logDiagOnce(reasonKey, detail);
+              var rest = chunks.slice(index).join("");
+              if (rest && (voiceOn || force)) speakBrowser(rest, function(){ guardedFinish(true); });
+              else guardedFinish(true);
+            }
+
+            /* Sequential playback with one-chunk lookahead fetch:
+               the next sentence is synthesised while the current
+               one is still playing. */
+            var nextFetch = fetchChunk(chunks[0], key);
+            /* Avoid an unhandled rejection if playback is stopped
+               before this fetch is awaited. */
+            nextFetch.catch(function(){});
+            (function playAt(i){
+              if (mySeq !== speakSeq){ clearTimeout(watchdog); return; }
+              if (i >= chunks.length){ guardedFinish(fellBack); return; }
+              var thisFetch = nextFetch;
+              if (i + 1 < chunks.length){
+                nextFetch = fetchChunk(chunks[i + 1], key);
+                nextFetch.catch(function(){});
+              }
+              thisFetch.then(function(blob){
+                if (mySeq !== speakSeq){ clearTimeout(watchdog); return; }
+                return playBlob(blob);
+              }).then(function(){
+                if (mySeq !== speakSeq){ clearTimeout(watchdog); return; }
+                playAt(i + 1);
+              }).catch(function(err){
+                if (mySeq !== speakSeq){ clearTimeout(watchdog); return; }
+                fallbackFrom(i, err);
+              });
+            })(0);
+          }
+
+          function speak(text, done){
+            speakInternal(text, function(){ if (done) done(); }, false);
+          }
+          function test(cb){
+            speakInternal("こんにちは、丸山さん。こちらが、選んだ声です。よろしくお願いいたします。",
+              function(fellBack){ if (cb) cb(true, fellBack); }, true);
+          }
+          return {
+            speak: speak, test: test, stop: stop, primeAudio: primeAudio,
+            getVoice: getVoice, setVoice: setVoice
+          };
+        })();
+        refreshSettingsUI();
+
+        var busy = false;
+        function deliverReply(reply, done){
+          addMsg("ai", "MYU", reply);
+          setState("speaking");
+          var finished = false;
+          var finish = function(){
+            if (finished) return;
+            finished = true;
+            setState("idle");
+            busy = false;
+            if (done) done();
+          };
+          speak(reply, finish);
+          if (!voiceOn){
+            /* Voice off: nothing will play, so don't wait for a
+               speech-end callback that never comes. (With voice
+               on, Voice.speak always calls back — via TTS playback
+               end, its own watchdog, or the browser fallback.) */
+            setTimeout(finish, 900);
+          }
+        }
+        function ask(text, done){
+          text = (text || "").trim();
+          if (!text || busy){ if (done) done(); return; }
+          busy = true;
+          addMsg("me", "MARUYAMA", text);
+          setState("thinking");
+          var local = null;
+          try{ local = answer(text); }catch(e){ local = null; }
+          if (local !== null && local !== undefined){
+            /* Fixed pattern: instant local answer, as before. */
+            setTimeout(function(){
+              pushHistory(text, local);
+              deliverReply(local, done);
+            }, 650);
+            return;
+          }
+          /* No fixed pattern: the brain (OpenAI API) answers. */
+          Brain.ask(text, history, function(reply, diag){
+            pushHistory(text, reply);
+            deliverReply(reply, done);
+            if (diag) addDiagNote(diag);
+          });
+        }
+
+        form.addEventListener("submit", function(e){
+          e.preventDefault();
+          primeSpeech();
+          var v = input.value;
+          input.value = "";
+          ask(v);
+        });
+        $("chips").addEventListener("click", function(e){
+          var b = e.target.closest("[data-q]");
+          if (b){ primeSpeech(); ask(b.getAttribute("data-q")); }
+        });
+
+        /* =========================================================
+           Voice input — explicit support check + visible fallback.
+           Never fail silently: every unsupported / denied / error
+           path shows the notice panel (and a note in the log) with
+           the reason and the keyboard-dictation alternative.
+           ========================================================= */
+        var SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+        var DICTATION_GUIDE =
+          "<b>代わりの方法（キーボードの音声入力）</b>" +
+          "<ol>" +
+          "<li>下の文字入力欄をタップして、キーボードを出します。</li>" +
+          "<li>キーボードにある<b>マイクのキー</b>を押して、そのまま話します。話した内容が文字になります。</li>" +
+          "<li>文字を確認して「送信」を押してください。</li>" +
+          "</ol>" +
+          "文字入力はいつでもそのまま使えます。PCの Chrome など対応ブラウザでは、ロボットの下の大きなマイクボタンから直接話しかけられます。";
+
+        function escHtml(s){
+          return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+        /* Environment diagnostics, shown verbatim with every failure so
+           the exact cause can be read off the screen and reported back. */
+        function voiceDiagHTML(raw){
+          var srTxt = SR ? (window.SpeechRecognition ? "あり (SpeechRecognition)" : "あり (webkitSpeechRecognition)") : "なし (SpeechRecognition / webkitSpeechRecognition ともに undefined)";
+          var gumTxt = (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? "使える (navigator.mediaDevices.getUserMedia あり)" : "使えない (getUserMedia なし)";
+          var secTxt = (window.isSecureContext === true) ? "はい (HTTPS / 安全な接続)" : (window.isSecureContext === false ? "いいえ (安全な接続ではない)" : "不明");
+          var proto = "";
+          try{ proto = String(location.protocol || ""); }catch(e){ proto = ""; }
+          var html = "";
+          if (raw){
+            html += "<div class='vn-raw'>生のエラー: " + escHtml(raw) + "</div>";
+          }
+          html += "<div class='vn-diag'><b>環境診断</b><br>" +
+            "音声認識: " + escHtml(srTxt) + "<br>" +
+            "マイク取得: " + escHtml(gumTxt) + "<br>" +
+            "HTTPS（安全な接続）: " + escHtml(secTxt) + (proto ? " / protocol: " + escHtml(proto) : "") + "<br>" +
+            "UA: " + escHtml(navigator.userAgent || "") + "</div>";
+          return html;
+        }
+        function showVoiceNotice(title, html){
+          voiceNoticeTitle.textContent = title;
+          voiceNoticeBody.innerHTML = html;
+          voiceNotice.classList.add("show");
+          try{ voiceNotice.scrollIntoView({ behavior:"smooth", block:"nearest" }); }catch(e){}
+        }
+        function hideVoiceNotice(){ voiceNotice.classList.remove("show"); }
+        voiceNoticeClose.addEventListener("click", hideVoiceNotice);
+
+        function voiceUnsupportedReason(){
+          if (window.isSecureContext === false){
+            return "このページが安全な接続（HTTPS）で開かれていないため、ブラウザがマイクと音声認識を止めています。";
+          }
+          if (!SR){
+            return "今お使いの環境（iPhoneやアプリ内ブラウザなど）では、このページの音声認識が使えません。ブラウザ側に音声認識の仕組みが用意されていないため、マイクボタンを押しても声を拾えません。";
+          }
+          return null;
+        }
+
+        /* ---- voice session: mic on/off toggle ----
+           The mic button toggles a session ON or OFF.
+           While ON, the page keeps listening: recognition runs that
+           end on their own (silence, engine timeouts) are restarted
+           automatically, and transcripts accumulate. When no new
+           words arrive for 1 second after speech was heard, the
+           utterance is treated as finished and answered; after the
+           spoken reply ends, listening resumes, so the conversation
+           continues hands-free. While nothing has been said, it just
+           waits — silence alone never triggers a reply. Tapping the
+           button again (OFF) closes the input completely: listening
+           and auto-restart stop and the page returns to standby.
+           Saying a closing word on its own does the same (see
+           isClosingUtterance). Fatal errors (permission denied, no
+           recognizer, ...) also close the session and show why. */
+        var rec = null, recording = false, startTimer = null;
+        var micOn = false, phase = "off"; /* off | listening | responding */
+        /* Latched voice-block state: once the host frame or the
+           browser has refused the microphone, further taps must NOT
+           start recognition again — each retry flipped the UI to
+           "listening" and straight back (the visible chatter) and
+           stacked another identical error notice. The latch is
+           cleared only by the explicit retry button in the notice,
+           after the user has had a chance to change the setting. */
+        var voiceBlocked = false, policyBlocked = false;
+        var fatalShown = false, startFailCount = 0;
+        var restartTimer = null, elapsedTimer = null, silenceTimer = null;
+        var listenStart = 0;
+        var accFinal = "", interimNow = "", recFinalSeen = 0;
+        var lastHeardAt = 0; /* last time any heard words were updated */
+
+        function setMicUI(on){
+          micBtn.classList.toggle("rec", on);
+          micBtn.setAttribute("aria-label", on ? "マイクをオフにする" : "マイクをオンにして音声で話す");
+          micBtn.setAttribute("aria-pressed", on ? "true" : "false");
+          if (micLabel) micLabel.textContent = on ? "マイク ON ・ もう一度押すとオフ" : "タップしてマイク ON";
+        }
+        function utteranceText(){
+          return (accFinal + interimNow).replace(/\s+/g, " ").trim();
+        }
+        function renderListenSub(){
+          if (!micOn || phase !== "listening") return;
+          var sec = Math.max(0, Math.floor((Date.now() - listenStart) / 1000));
+          var heard = utteranceText();
+          if (heard){
+            stateSub.textContent = "聞き取り中（" + sec + "秒）：「" + heard + "」 言葉が1秒途切れたら返事をします。";
+          } else {
+            stateSub.textContent = "聞いています（" + sec + "秒）… そのまま話してください。言葉が1秒途切れたら返事をします。閉じる時はもう一度マイクを押すか、「終わり」だけを言ってください。";
+          }
+        }
+        /* Delivery watchdog: runs while the session is on and checks
+           the clock itself, instead of relying only on the timer
+           armed inside onresult. Recognition restarts, interim
+           overwrites and start-failure retries cannot clear this —
+           if words were heard and 1 second has passed since the
+           last update, the reply is delivered, guaranteed. */
+        function sessionTick(){
+          renderListenSub();
+          if (micOn && phase === "listening" && lastHeardAt &&
+              utteranceText() && (Date.now() - lastHeardAt >= 1000)){
+            onUtteranceSilence();
+          }
+        }
+        function clearSessionTimers(){
+          if (startTimer){ clearTimeout(startTimer); startTimer = null; }
+          if (restartTimer){ clearTimeout(restartTimer); restartTimer = null; }
+          if (silenceTimer){ clearTimeout(silenceTimer); silenceTimer = null; }
+          if (elapsedTimer){ clearInterval(elapsedTimer); elapsedTimer = null; }
+        }
+        /* OFF: close the input completely and return to standby.
+           Any unanswered partial utterance is discarded, never sent. */
+        function closeSession(){
+          micOn = false; phase = "off"; recording = false;
+          accFinal = ""; interimNow = ""; lastHeardAt = 0;
+          clearSessionTimers();
+          var r = rec; rec = null;
+          if (r){ try{ r.abort(); }catch(e){} }
+          /* Stop whichever voice is playing: the OpenAI TTS audio
+             and/or the browser fallback voice. */
+          try{ if (typeof Voice !== "undefined" && Voice && Voice.stop) Voice.stop(); }catch(e){}
+          if ("speechSynthesis" in window) speechSynthesis.cancel();
+          stopMicLevel();
+          busy = false;
+          setMicUI(false);
+          if (voiceBlocked && micLabel) micLabel.textContent = "マイクがブロックされています";
+          setState("idle");
+        }
+        function fatalError(code, raw){
+          if (fatalShown) return;
+          fatalShown = true;
+          /* Never throw heard words away: if something was already
+             recognised when the session died, answer it first (the
+             reply text always appears, even if voice output fails),
+             then explain the error. Previously closeSession() here
+             silently discarded the pending utterance, so the user
+             saw their words recognised but never got a reply. */
+          var pending = utteranceText();
+          closeSession();
+          voiceErrorNotice(code, raw);
+          if (pending && !isClosingUtterance(pending)) ask(pending);
+        }
+        function scheduleRestart(){
+          if (!micOn || phase !== "listening") return;
+          if (restartTimer) clearTimeout(restartTimer);
+          restartTimer = setTimeout(function(){
+            restartTimer = null;
+            startOneRecognition();
+          }, 300);
+        }
+        function armSilenceTimer(){
+          if (silenceTimer) clearTimeout(silenceTimer);
+          silenceTimer = setTimeout(onUtteranceSilence, 1000);
+        }
+        function onUtteranceSilence(){
+          silenceTimer = null;
+          if (!micOn || phase !== "listening") return;
+          var text = utteranceText();
+          if (!text) return; /* nothing said: keep waiting, no reply */
+          deliverUtterance(text);
+        }
+        /* A closing word shuts the mic ONLY when it is the whole
+           utterance — short and consisting of nothing else — so using
+           「終わり」 or 「終了」 inside a sentence never cuts the
+           session by mistake. */
+        var CLOSING_WORDS = ["終わり","おわり","終了","しゅうりょう","終わりです","終了です","終わります","終了します","終わりにして","終わりにします","マイクオフ","マイクをオフ","マイクオフにして","マイクをオフにして","ありがとう","ありがとうございました","以上","いじょう"];
+        function isClosingUtterance(text){
+          var n = text.replace(/[\s、。！？!?,.・…]+/g, "");
+          if (!n || n.length > 12) return false;
+          for (var i = 0; i < CLOSING_WORDS.length; i++){
+            if (n === CLOSING_WORDS[i]) return true;
+          }
+          return false;
+        }
+        function deliverUtterance(text){
+          accFinal = ""; interimNow = ""; lastHeardAt = 0;
+          if (silenceTimer){ clearTimeout(silenceTimer); silenceTimer = null; }
+          phase = "responding";
+          /* Quiet the rings' voice level while replying, so the
+             reply animation takes over. */
+          stopMicLevel();
+          var r = rec;
+          if (r){ try{ r.abort(); }catch(e){} }
+          recording = false;
+          if (isClosingUtterance(text)){
+            busy = true;
+            addMsg("me", "MARUYAMA", text);
+            setState("thinking");
+            setTimeout(function(){
+              if (!micOn) return;
+              var reply = /ありがとう/.test(text)
+                ? "どういたしまして。マイクをオフにします。またいつでも声をかけてください。"
+                : "分かりました。マイクをオフにします。またいつでも声をかけてください。";
+              addMsg("ai", "MYU", reply);
+              setState("speaking");
+              var doneClosing = false;
+              var finishClose = function(){
+                if (doneClosing) return;
+                doneClosing = true;
+                closeSession();
+              };
+              speak(reply, finishClose);
+              if (!voiceOn || !("speechSynthesis" in window)) setTimeout(finishClose, 1200);
+            }, 450);
+            return;
+          }
+          ask(text, function(){
+            /* Reply finished: go back to listening (mic still ON),
+               so the conversation can continue hands-free. */
+            if (micOn) resumeListening();
+          });
+        }
+        function resumeListening(){
+          if (!micOn) return;
+          phase = "listening";
+          accFinal = ""; interimNow = ""; lastHeardAt = 0;
+          setState("listening");
+          renderListenSub();
+          startOneRecognition();
+          startMicLevel();
+        }
+
+        /* raw: verbatim error string to display, e.g.
+           "error: not-allowed" / "getUserMedia: NotAllowedError" */
+        function voiceErrorNotice(code, raw){
+          if (code === "aborted") return; /* user stopped it — not an error */
+          var rawText = raw || ("error: " + code);
+          var title, body;
+          if (code === "not-allowed" || code === "service-not-allowed" ||
+              /NotAllowedError/.test(code) || /NotAllowedError/.test(rawText)){
+            title = "マイクの使用が許可されませんでした";
+            body = "ブラウザ／端末の設定でマイクが許可されていないため、声を拾えませんでした。設定でこのページ（ブラウザ）のマイクを「許可」にすると使える場合があります。それまでは下の方法で話しかけられます。";
+          } else if (code === "audio-capture" || /NotFoundError|OverconstrainedError/.test(rawText)){
+            title = "マイクが見つかりませんでした";
+            body = "使えるマイクが検出できませんでした。マイクの接続を確認するか、下の方法で入力してください。";
+          } else if (/NotReadableError/.test(rawText)){
+            title = "マイクを使えませんでした";
+            body = "マイクが他のアプリなどで使用中のため、このページで使えなかったようです。他のアプリを閉じてから、もう一度お試しください。";
+          } else if (code === "network"){
+            title = "音声認識に接続できませんでした";
+            body = "音声認識は通信を使って声を文字にします。電波の良い場所で、もう一度マイクボタンを押してみてください。急ぐ場合は下の方法が確実です。";
+          } else if (code === "no-speech"){
+            title = "声が聞き取れませんでした";
+            body = "マイクは動いていますが、声が入らなかったようです。もう一度、マイクに近づいてはっきり話してみてください。うまくいかない場合は下の方法をお使いください。";
+          } else if (code === "language-not-supported"){
+            title = "日本語の音声認識が使えませんでした";
+            body = "この環境では日本語の聞き取りに対応していないようです。下の方法で入力してください。";
+          } else {
+            title = "音声入力を開始できませんでした";
+            body = "音声認識を始められませんでした。対応ブラウザ（PCの Chrome など）ではそのまま使えます。今の環境では下の方法で入力してください。";
+          }
+          if (code === "not-allowed" || code === "service-not-allowed" ||
+              /NotAllowedError/.test(code) || /NotAllowedError/.test(rawText)){
+            /* Latch the block: no more start/stop flicker or repeated
+               identical notices on later taps until the user retries
+               deliberately from the notice's retry button. */
+            voiceBlocked = true;
+            micBtn.classList.add("blocked");
+            if (voiceRetry) voiceRetry.classList.add("show");
+          }
+          body += voiceDiagHTML(rawText) + "<div style='margin-top:10px;'>" + DICTATION_GUIDE + "</div>";
+          showVoiceNotice(title, body);
+          addNote(title + "（" + rawText + "）。入力欄とキーボードのマイクで代わりに話せます（案内をご覧ください）。");
+        }
+
+        function initRecognition(){
+          /* A fresh instance for every run: a used instance can refuse
+             to restart after an error on some browsers. continuous is
+             on, and the session layer above restarts runs that still
+             end on their own, so listening persists while mic is ON. */
+          rec = new SR();
+          rec.lang = "ja-JP";
+          rec.continuous = true;
+          rec.interimResults = true;
+          rec.maxAlternatives = 1;
+          recFinalSeen = 0;
+          rec.onstart = function(){
+            if (startTimer){ clearTimeout(startTimer); startTimer = null; }
+            recording = true;
+            startFailCount = 0;
+            hideVoiceNotice();
+            renderListenSub();
+          };
+          /* Voice activity for the rings comes from recognition
+             itself — no separate microphone stream (see the level
+             meter note below). */
+          rec.onspeechstart = function(){ noteVoiceActivity(); };
+          rec.onsoundstart = function(){ noteVoiceActivity(); };
+          rec.onresult = function(ev){
+            if (!micOn || phase !== "listening") return;
+            var finals = "", interim = "", i, r, fc = 0;
+            try{
+              for (i = 0; i < ev.results.length; i++){
+                r = ev.results[i];
+                if (r.isFinal){
+                  fc++;
+                  if (i >= recFinalSeen) finals += r[0].transcript;
+                } else {
+                  interim += r[0].transcript;
+                }
+              }
+              recFinalSeen = fc;
+            }catch(e){}
+            if (finals) accFinal += finals;
+            interimNow = interim;
+            /* Show the words as they are heard, and (re)arm the
+               1-second silence timer: only speech starts the clock,
+               and every new word pushes the reply back. */
+            if (utteranceText()){
+              lastHeardAt = Date.now();
+              noteVoiceActivity();
+              renderListenSub();
+              armSilenceTimer();
+            }
+          };
+          rec.onerror = function(ev){
+            var code = (ev && ev.error) ? String(ev.error) : "unknown";
+            /* Silence and aborts are not failures in session mode:
+               onend restarts recognition while the mic stays ON. */
+            if (code === "no-speech" || code === "aborted") return;
+            fatalError(code, "error: " + code);
+          };
+          rec.onend = function(){
+            recording = false;
+            /* Preserve words this run had only as interim results:
+               the next run starts with an empty result list and
+               would overwrite interimNow, erasing speech that was
+               heard but not yet finalised — one way a recognised
+               utterance could vanish before the 1 second was up. */
+            if (interimNow){ accFinal += interimNow; interimNow = ""; }
+            /* This run ended on its own. While the mic is ON and we
+               are in the listening phase, restart so the session
+               keeps listening; in any other phase, stay stopped. */
+            if (micOn && phase === "listening") scheduleRestart();
+          };
+        }
+
+        function startOneRecognition(){
+          if (!micOn || phase !== "listening") return;
+          try{ initRecognition(); }
+          catch(e){
+            rec = null;
+            fatalError("start-failed", "new SpeechRecognition: " + ((e && e.name) ? e.name : "Error") + (e && e.message ? " / " + e.message : ""));
+            return;
+          }
+          recording = false;
+          try{
+            rec.start();
+          }catch(e){
+            startFailCount++;
+            if (startFailCount >= 5){
+              fatalError("start-failed", "recognition.start: " + ((e && e.name) ? e.name : "Error") + (e && e.message ? " / " + e.message : ""));
+              return;
+            }
+            scheduleRestart();
+            return;
+          }
+          /* If neither onstart nor onerror fires (some in-app webviews
+             expose the API but never actually start), surface it and
+             close the session instead of pretending to listen. */
+          if (startTimer) clearTimeout(startTimer);
+          startTimer = setTimeout(function(){
+            startTimer = null;
+            if (micOn && phase === "listening" && !recording){
+              fatalShown = true;
+              var pendingW = utteranceText();
+              closeSession();
+              showVoiceNotice(
+                "音声認識が始まりませんでした",
+                "この環境では音声認識が実際には動いていないようです（アプリ内ブラウザなどで起こります）。対応ブラウザ（PCの Chrome など）ではそのまま使えます。今は下の方法で入力してください。" + voiceDiagHTML("timeout: onstart も onerror も 4秒以内に来ませんでした") + "<div style='margin-top:10px;'>" + DICTATION_GUIDE + "</div>"
+              );
+              addNote("音声認識が始まりませんでした（timeout: onstart/onerror なし）。入力欄とキーボードのマイクで代わりに話せます（案内をご覧ください）。");
+              /* Words heard before the failure still get their reply. */
+              if (pendingW && !isClosingUtterance(pendingW)) ask(pendingW);
+            }
+          }, 4000);
+        }
+
+        function beginSession(){
+          micOn = true;
+          phase = "listening";
+          fatalShown = false;
+          startFailCount = 0;
+          accFinal = ""; interimNow = ""; lastHeardAt = 0;
+          listenStart = Date.now();
+          hideVoiceNotice();
+          setMicUI(true);
+          if (elapsedTimer) clearInterval(elapsedTimer);
+          elapsedTimer = setInterval(sessionTick, 500);
+          resumeListening();
+        }
+
+        /* =========================================================
+           Voice-reactive rings.
+           The rings follow the voice WITHOUT a second microphone
+           stream: opening getUserMedia alongside SpeechRecognition
+           made the browser ask for mic permission twice per tap,
+           and a parallel stream can fight recognition and speech
+           output for the audio session. Instead, recognition itself
+           reports voice activity — onspeechstart and every result
+           event stamp lastVoiceAt — and while speech is arriving,
+           the level follows a speech-like fluctuation that swells
+           the whole orb and thickens every ring's line (the breathe
+           keyframes read --bw1/--bw2, so raising those custom
+           properties thickens the line mid-animation); when it goes
+           quiet the level eases back down and the rings return to
+           plain breathing. The browser's own speech output is
+           driven by the same synthesised rhythm while MYU speaks.
+           This only READS the session state (micOn / phase /
+           body[data-state]); recognition and the reply flow are
+           untouched.
+           ========================================================= */
+        var orbEl = document.querySelector(".orb");
+        var ringEls = document.querySelectorAll(".orb-ring");
+        var coreEl = document.querySelector(".orb-core");
+        var RING_BASE = [
+          { bw1:1,   bw2:3.5 },
+          { bw1:1.5, bw2:5 },
+          { bw1:1.5, bw2:4.5 }
+        ];
+        var lastVoiceAt = 0;
+        var levelVal = 0, levelRAF = null, synthTarget = 0, synthUntil = 0;
+
+        /* Called from recognition events whenever speech is heard,
+           so the rings can react without a separate mic stream. */
+        function noteVoiceActivity(){ lastVoiceAt = Date.now(); }
+        function synthLevel(now){
+          if (now >= synthUntil){
+            synthTarget = (Math.random() < 0.22) ? (0.04 + Math.random() * 0.14)
+                                                 : (0.32 + Math.random() * 0.58);
+            synthUntil = now + 90 + Math.random() * 150;
+          }
+          return synthTarget;
+        }
+        function applyLevel(){
+          var l = levelVal, i, b, el;
+          if (orbEl) orbEl.style.transform = "scale(" + (1 + l * 0.09).toFixed(3) + ")";
+          for (i = 0; i < ringEls.length && i < RING_BASE.length; i++){
+            b = RING_BASE[i]; el = ringEls[i];
+            el.style.setProperty("--bw1", (b.bw1 + l * 1.8).toFixed(2) + "px");
+            el.style.setProperty("--bw2", (b.bw2 + l * 6).toFixed(2) + "px");
+          }
+          if (coreEl) coreEl.style.boxShadow = "0 0 " + (20 + l * 26).toFixed(1) + "px var(--state), 0 0 " + (52 + l * 60).toFixed(1) + "px rgba(56,214,255,.25)";
+        }
+        function resetLevelVisual(){
+          var i;
+          if (orbEl) orbEl.style.transform = "";
+          for (i = 0; i < ringEls.length; i++){
+            ringEls[i].style.removeProperty("--bw1");
+            ringEls[i].style.removeProperty("--bw2");
+          }
+          if (coreEl) coreEl.style.boxShadow = "";
+        }
+        function levelLoop(){
+          levelRAF = null;
+          var speakingNow = document.body.getAttribute("data-state") === "speaking";
+          if (!micOn && !speakingNow){
+            levelVal = 0;
+            resetLevelVisual();
+            return;
+          }
+          var target;
+          if (speakingNow) target = synthLevel(performance.now());
+          else if (micOn && phase === "listening")
+            target = (Date.now() - lastVoiceAt < 350) ? synthLevel(performance.now()) : 0;
+          else target = 0;
+          /* fast attack on a voice onset, slow release back to rest */
+          var k = target > levelVal ? 0.5 : 0.12;
+          levelVal += (target - levelVal) * k;
+          if (levelVal < 0.001 && target === 0) levelVal = 0;
+          applyLevel();
+          levelRAF = requestAnimationFrame(levelLoop);
+        }
+        function ensureLevelLoop(){
+          if (levelRAF === null) levelRAF = requestAnimationFrame(levelLoop);
+        }
+        function levelStateHook(name){
+          if (name === "speaking") ensureLevelLoop();
+        }
+        function startMicLevel(){
+          /* No stream to open: recognition events feed the level
+             (see noteVoiceActivity). Just run the level loop. */
+          ensureLevelLoop();
+        }
+        function stopMicLevel(){
+          levelVal = 0;
+          lastVoiceAt = 0;
+          if (levelRAF !== null){ cancelAnimationFrame(levelRAF); levelRAF = null; }
+          resetLevelVisual();
+        }
+
+        /* Support check on load: if it can never work here, say so up front. */
+        /* Permissions-Policy check: when this page runs inside a
+           frame whose policy disables the microphone, the browser
+           itself can tell us — and then recognition must never even
+           be attempted, because every attempt is refused instantly
+           (that start/stop flicker was the "chatter" on tap, and it
+           stacked an identical not-allowed notice every time). */
+        try{
+          var pp = document.permissionsPolicy || document.featurePolicy;
+          if (pp && pp.allowsFeature) policyBlocked = !pp.allowsFeature("microphone");
+        }catch(e){}
+        var unsupported = voiceUnsupportedReason();
+        if (policyBlocked){
+          voiceBlocked = true;
+          micBtn.classList.add("unsupported");
+          micBtn.classList.add("blocked");
+          micBtn.setAttribute("aria-label", "この表示ではマイクが届きません。押すと理由と代わりの方法を表示します");
+          if (micLabel) micLabel.textContent = "この表示ではマイクが届きません";
+          showVoiceNotice(
+            "この表示ではマイクが届きません",
+            "この試作は今、Museの画面の内側に埋め込まれて表示されていて、その内側までマイクの許可が渡されていません。ボタンを押しても声を拾えないのはそのためで、丸山さんの端末や設定の問題ではありません。" +
+            "<div style='margin-top:10px;'>声で話したい時は、このページを<b>ブラウザで直接（単独で）開く</b>形にするとマイクが届く可能性があります。今の表示のままでは、下の方法が確実です。</div>" +
+            voiceDiagHTML("Permissions-Policy: microphone はこの枠では無効") +
+            "<div style='margin-top:10px;'>" + DICTATION_GUIDE + "</div>"
+          );
+          addNote("この表示（埋め込み）ではマイクが届かないため、音声入力は止めています。文字入力とキーボードのマイクで話しかけてください。");
+        } else if (unsupported){
+          micBtn.classList.add("unsupported");
+          micBtn.setAttribute("aria-label", "音声入力はこの環境では使えません。押すと理由と代わりの方法を表示します");
+          showVoiceNotice(
+            "この環境では音声入力が使えません",
+            unsupported + voiceDiagHTML(SR ? "" : "SpeechRecognition: undefined (webkitSpeechRecognition も undefined)") + "<div style='margin-top:10px;'>" + DICTATION_GUIDE + "</div>"
+          );
+        } else {
+          /* Recognition is created fresh on each mic tap (see beginSession).
+             If mic permission is already denied, warn before the user taps. */
+          if (navigator.permissions && navigator.permissions.query){
+            try{
+              navigator.permissions.query({ name: "microphone" }).then(function(st){
+                var warn = function(){
+                  if (st.state === "denied"){
+                    voiceBlocked = true;
+                    micBtn.classList.add("unsupported");
+                    micBtn.classList.add("blocked");
+                    if (voiceRetry) voiceRetry.classList.add("show");
+                    showVoiceNotice(
+                      "マイクの許可がブロックされています",
+                      "このページへのマイク使用が「拒否」になっています。ブラウザの設定で許可に変えると、マイクボタンから話しかけられます。それまでは下の方法で入力してください。" + voiceDiagHTML("permissions: microphone = denied") + "<div style='margin-top:10px;'>" + DICTATION_GUIDE + "</div>"
+                    );
+                  }
+                };
+                warn();
+                st.onchange = warn;
+              }).catch(function(){});
+            }catch(e){}
+          }
+        }
+
+        /* Deliberate retry from the notice: the only path that
+           clears the latched block, so a changed setting can be
+           picked up without every tap hammering recognition. */
+        if (voiceRetry){
+          voiceRetry.addEventListener("click", function(){
+            voiceBlocked = false;
+            fatalShown = false;
+            micBtn.classList.remove("blocked");
+            voiceRetry.classList.remove("show");
+            hideVoiceNotice();
+            if (busy) return;
+            primeSpeech();
+            beginSession();
+          });
+        }
+
+        micBtn.addEventListener("click", function(){
+          /* Latched block (host frame policy, or permission refused
+             earlier): do NOT start recognition again. Starting and
+             being refused instantly is what made the screen flicker
+             on every tap and stacked identical error notices. Just
+             re-show the explanation and put the user on the text
+             input instead. */
+          if (voiceBlocked){
+            voiceNotice.classList.add("show");
+            try{ voiceNotice.scrollIntoView({ behavior:"smooth", block:"nearest" }); }catch(e){}
+            input.focus();
+            return;
+          }
+          /* Unsupported environment: explain, never fail silently. */
+          if (!SR){
+            var reason = voiceUnsupportedReason() ||
+              "今お使いの環境では、このページの音声認識が使えません。";
+            showVoiceNotice("この環境では音声入力が使えません", reason + voiceDiagHTML("SpeechRecognition: undefined") + "<div style='margin-top:10px;'>" + DICTATION_GUIDE + "</div>");
+            input.focus();
+            return;
+          }
+          /* Toggle OFF: close the input completely — listening and
+             auto-restart stop, and the page returns to standby. */
+          if (micOn){
+            closeSession();
+            return;
+          }
+          if (busy) return;
+          hideVoiceNotice();
+          /* Unlock speech output FIRST, inside this tap: the spoken
+             reply to a voice question is composed later (outside any
+             gesture), and iOS drops it unless synthesis was unlocked
+             by a speak() during a user gesture. Do NOT cancel()
+             right before priming — an unconditional cancel in the
+             same task can swallow the priming utterance itself on
+             iOS, which left the voice path locked and the reply
+             silent. (If a reply were playing, busy would be true and
+             the tap would already have returned above.) */
+          primeSpeech();
+          /* Start recognition directly, synchronously inside this
+             tap handler, on every platform — and ask for the
+             microphone exactly ONCE. Earlier builds also called
+             getUserMedia (to prime the mic before starting, and
+             again for the ring level meter); each of those is a
+             separate permission request, so a single tap could show
+             the mic prompt two or three times, and returning users
+             saw the prompt repeat on every reply cycle. Speech-
+             Recognition requests permission itself, so this page
+             now makes no getUserMedia call at all. Starting
+             synchronously also keeps the user gesture, which iOS
+             Safari requires for recognition to actually start. */
+          beginSession();
+        });
+
+        /* ---------- greeting ---------- */
+        var h = new Date().getHours();
+        var greet = (h < 5) ? "こんばんは" : (h < 11) ? "おはようございます" : (h < 18) ? "こんにちは" : "こんばんは";
+        addMsg("ai", "MYU", greet + "、丸山さん。試作1号、起動しました。声か文字で話しかけてください。「進行中の仕事を教えて」と聞いていただければ、今の状況をお答えします。文字では計算やタイマー、メモもできるようになりました（例：「12×34は？」「3分タイマー」「メモして：○○」）。コンソールの「頭脳の設定」でOpenAI APIキーを入れていただければ、自由な質問にもお答えします。");
+        if (unsupported && !policyBlocked){
+          addNote("この環境ではマイクでの音声入力が使えないため、案内を表示しました。文字入力欄をタップし、キーボードのマイクキーで話すと、そのまま声で入力できます。");
+        }
+      })();
+    </script>
+  </body>
+</html>
