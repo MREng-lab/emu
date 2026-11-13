@@ -1614,6 +1614,20 @@
            the reason and the keyboard-dictation alternative.
            ========================================================= */
         var SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+        /* iOS detection (iPhone / iPad / iPod, plus iPadOS reporting
+           itself as Macintosh with a touch screen). iOS Safari's
+           recognizer does not handle the desktop-style continuous
+           mode: with continuous on, start() can hang with neither
+           onstart nor onerror ever firing (the timeout the user hit
+           on the GitHub Pages copy). On iOS the recognizer is
+           therefore run one utterance at a time — continuous and
+           interim results off, and the session layer restarts it
+           after every run (see initRecognition / rec.onend). */
+        var IS_IOS = (function(){
+          var ua = navigator.userAgent || "";
+          if (/iPhone|iPad|iPod/.test(ua)) return true;
+          return ua.indexOf("Macintosh") !== -1 && navigator.maxTouchPoints > 1;
+        })();
         var DICTATION_GUIDE =
           "<b>代わりの方法（キーボードの音声入力）</b>" +
           "<ol>" +
@@ -1640,6 +1654,7 @@
           }
           html += "<div class='vn-diag'><b>環境診断</b><br>" +
             "音声認識: " + escHtml(srTxt) + "<br>" +
+            "開始方式: " + (IS_IOS ? "iOS方式（continuous OFF・一文ごとに開始し直す）" : "連続方式（continuous ON）") + "<br>" +
             "マイク取得: " + escHtml(gumTxt) + "<br>" +
             "HTTPS（安全な接続）: " + escHtml(secTxt) + (proto ? " / protocol: " + escHtml(proto) : "") + "<br>" +
             "UA: " + escHtml(navigator.userAgent || "") + "</div>";
@@ -1690,6 +1705,14 @@
            after the user has had a chance to change the setting. */
         var voiceBlocked = false, policyBlocked = false;
         var fatalShown = false, startFailCount = 0;
+        /* iOS start-failure bookkeeping: consecutive start attempts
+           that never produced onstart (or threw). On iOS a failed
+           start is retried with a widening gap instead of giving up
+           at the first timeout, but only up to a cap — past the cap
+           the session closes and the notice records how many tries
+           were made (and that the iOS start mode was in use). */
+        var iosStartFails = 0;
+        var IOS_START_MAX = 4; /* 1 first try + 3 retries */
         var restartTimer = null, elapsedTimer = null, silenceTimer = null;
         var listenStart = 0;
         var accFinal = "", interimNow = "", recFinalSeen = 0;
@@ -1772,6 +1795,20 @@
             restartTimer = null;
             startOneRecognition();
           }, 300);
+        }
+        /* Retry after a FAILED start (iOS): the gap widens with each
+           consecutive failure (600ms, 1.2s, 2.4s) so a recognizer
+           that never starts cannot spin in a tight start/abort loop.
+           Normal per-utterance restarts keep the short gap above —
+           only failures come through here. */
+        function scheduleStartRetry(){
+          if (!micOn || phase !== "listening") return;
+          if (restartTimer) clearTimeout(restartTimer);
+          var delay = Math.min(600 * Math.pow(2, Math.max(0, iosStartFails - 1)), 2400);
+          restartTimer = setTimeout(function(){
+            restartTimer = null;
+            startOneRecognition();
+          }, delay);
         }
         function armSilenceTimer(){
           if (silenceTimer) clearTimeout(silenceTimer);
@@ -1890,19 +1927,31 @@
 
         function initRecognition(){
           /* A fresh instance for every run: a used instance can refuse
-             to restart after an error on some browsers. continuous is
-             on, and the session layer above restarts runs that still
-             end on their own, so listening persists while mic is ON. */
+             to restart after an error on some browsers.
+             Start mode is split by platform:
+             - PC / Android: continuous ON + interim results ON, as
+               before — one long-running recognizer, restarted by the
+               session layer whenever a run still ends on its own.
+             - iOS: continuous OFF + interim results OFF. One run
+               hears one utterance and ends; the session layer starts
+               a fresh run right after each end, which preserves the
+               "keeps listening while the mic is ON" behaviour without
+               the continuous mode that never starts on iOS Safari.
+               Conversation flow is identical either way: words are
+               accumulated across runs, 1 second of silence delivers
+               the utterance, and listening resumes after the reply. */
           rec = new SR();
+          var self = rec;
           rec.lang = "ja-JP";
-          rec.continuous = true;
-          rec.interimResults = true;
+          rec.continuous = !IS_IOS;
+          rec.interimResults = !IS_IOS;
           rec.maxAlternatives = 1;
           recFinalSeen = 0;
           rec.onstart = function(){
             if (startTimer){ clearTimeout(startTimer); startTimer = null; }
             recording = true;
             startFailCount = 0;
+            iosStartFails = 0;
             hideVoiceNotice();
             renderListenSub();
           };
@@ -1947,6 +1996,10 @@
           };
           rec.onend = function(){
             recording = false;
+            /* An instance aborted by the iOS start-retry path must
+               not trigger the normal restart — the retry is already
+               scheduled with its widened gap. */
+            if (self._suppressEnd){ self._suppressEnd = false; return; }
             /* Preserve words this run had only as interim results:
                the next run starts with an empty result list and
                would overwrite interimNow, erasing speech that was
@@ -1972,9 +2025,22 @@
           try{
             rec.start();
           }catch(e){
+            var startErr = "recognition.start: " + ((e && e.name) ? e.name : "Error") + (e && e.message ? " / " + e.message : "");
+            if (IS_IOS){
+              /* iOS: count the failed start and retry with a widening
+                 gap; only past the cap is it a fatal start failure,
+                 reported with the number of attempts made. */
+              iosStartFails++;
+              if (iosStartFails >= IOS_START_MAX){
+                fatalError("start-failed", startErr + "（開始試行 " + iosStartFails + " 回・iOS方式）");
+                return;
+              }
+              scheduleStartRetry();
+              return;
+            }
             startFailCount++;
             if (startFailCount >= 5){
-              fatalError("start-failed", "recognition.start: " + ((e && e.name) ? e.name : "Error") + (e && e.message ? " / " + e.message : ""));
+              fatalError("start-failed", startErr);
               return;
             }
             scheduleRestart();
@@ -1982,17 +2048,35 @@
           }
           /* If neither onstart nor onerror fires (some in-app webviews
              expose the API but never actually start), surface it and
-             close the session instead of pretending to listen. */
+             close the session instead of pretending to listen.
+             On iOS the hung instance is first aborted and start is
+             retried with a widening gap, up to the attempt cap; only
+             then does the session close with the notice below, whose
+             diagnostics record the attempt count and the iOS mode. */
           if (startTimer) clearTimeout(startTimer);
           startTimer = setTimeout(function(){
             startTimer = null;
             if (micOn && phase === "listening" && !recording){
+              if (IS_IOS && iosStartFails + 1 < IOS_START_MAX){
+                iosStartFails++;
+                var hung = rec;
+                if (hung){
+                  hung._suppressEnd = true;
+                  try{ hung.abort(); }catch(e){}
+                  if (rec === hung) rec = null;
+                }
+                scheduleStartRetry();
+                return;
+              }
               fatalShown = true;
               var pendingW = utteranceText();
               closeSession();
+              var timeoutRaw = IS_IOS
+                ? "timeout: onstart も onerror も 4秒以内に来ませんでした（開始試行 " + IOS_START_MAX + " 回・iOS方式）"
+                : "timeout: onstart も onerror も 4秒以内に来ませんでした";
               showVoiceNotice(
                 "音声認識が始まりませんでした",
-                "この環境では音声認識が実際には動いていないようです（アプリ内ブラウザなどで起こります）。対応ブラウザ（PCの Chrome など）ではそのまま使えます。今は下の方法で入力してください。" + voiceDiagHTML("timeout: onstart も onerror も 4秒以内に来ませんでした") + "<div style='margin-top:10px;'>" + DICTATION_GUIDE + "</div>"
+                "この環境では音声認識が実際には動いていないようです（アプリ内ブラウザなどで起こります）。対応ブラウザ（PCの Chrome など）ではそのまま使えます。今は下の方法で入力してください。" + voiceDiagHTML(timeoutRaw) + "<div style='margin-top:10px;'>" + DICTATION_GUIDE + "</div>"
               );
               addNote("音声認識が始まりませんでした（timeout: onstart/onerror なし）。入力欄とキーボードのマイクで代わりに話せます（案内をご覧ください）。");
               /* Words heard before the failure still get their reply. */
@@ -2006,6 +2090,7 @@
           phase = "listening";
           fatalShown = false;
           startFailCount = 0;
+          iosStartFails = 0;
           accFinal = ""; interimNow = ""; lastHeardAt = 0;
           listenStart = Date.now();
           hideVoiceNotice();
