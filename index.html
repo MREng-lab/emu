@@ -35,6 +35,7 @@
       }
       body[data-state="listening"]{ --state:var(--blue); }
       body[data-state="thinking"]{ --state:var(--amber); }
+      body[data-state="transcribing"]{ --state:var(--amber); }
       body[data-state="speaking"]{ --state:var(--green); }
       *{ box-sizing:border-box; }
       html,body{ margin:0; padding:0; }
@@ -208,6 +209,9 @@
       body[data-state="thinking"] .orb-ring.r1{ --dur:1.05s; }
       body[data-state="thinking"] .orb-ring.r2{ --dur:.88s; }
       body[data-state="thinking"] .orb-ring.r3{ --dur:.74s; }
+      body[data-state="transcribing"] .orb-ring.r1{ --dur:1.05s; }
+      body[data-state="transcribing"] .orb-ring.r2{ --dur:.88s; }
+      body[data-state="transcribing"] .orb-ring.r3{ --dur:.74s; }
       body[data-state="speaking"] .orb-ring.r1{ --dur:1.7s; }
       body[data-state="speaking"] .orb-ring.r2{ --dur:1.45s; }
       body[data-state="speaking"] .orb-ring.r3{ --dur:1.2s; }
@@ -498,7 +502,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 19v3"/></svg>
             </button>
             <span class="stage-mic-label" id="micLabel">タップしてマイク ON</span>
-            <span class="stage-mic-hint">オンの間は聞き取り続けます。言葉が1秒途切れたら返事をし、終わるとまた聞き取りに戻ります。閉じる時はもう一度押すか、「終わり」「終了」「マイクオフ」「ありがとう」<b>だけ</b>を言ってください（文の中で使うだけでは閉じません）</span>
+            <span class="stage-mic-hint">オンの間は聞き取り続けます。言葉が1秒途切れたら返事をし、終わるとまた聞き取りに戻ります。iPhoneでは録音した声を文字にして聞き取ります（無音が約1.2秒続くと文字起こしへ送ります）。閉じる時はもう一度押すか、「終わり」「終了」「マイクオフ」「ありがとう」<b>だけ</b>を言ってください（文の中で使うだけでは閉じません）</span>
           </div>
 
           <div class="stateline">
@@ -603,7 +607,7 @@
         <section class="card panel" aria-label="この試作でできること">
           <h2>この試作でできること</h2>
           <p>姿は <b>同心円のリング</b> です（ロボットの絵は当面お休み）。三重の輪は呼吸するようにゆっくり膨らんだり縮んだりし、線自体も太くなったり細くなったりします。輪ごとにタイミングがずれているので、機械的な点滅ではなく生きているような動きになります。状態（待機中・聞き取り中・考え中・応答中）で、<b>輪の色と呼吸の速さ</b> が変わります（待機中はゆっくり、聞き取り中は少し速く）。マイクがオンの間は、<b>話している間は輪がその場で膨らみ、線も太く</b>なります。静かになると、ゆっくり呼吸の動きに戻ります。こちらが読み上げている間は、話すリズムに合わせた動きになります。</p>
-          <p style="margin-top:10px;">声で話しかけると声で返します（対応ブラウザのみ）。返事の声は、頭脳のキーが設定されていれば <b>OpenAIの自然な声</b> で読み上げます（「頭脳の設定」で声を選べます）。キーが無い時や通信が切れた時は、ブラウザーの標準の声に自動で戻ります。マイクボタンはオン・オフ式で、オンの間は聞き取りを続け、言葉が1秒途切れたら返事をし、返事が終わるとまた聞き取りに戻ります。「終わり」「終了」「マイクオフ」「ありがとう」だけを言うとマイクが閉じます。ただし今の表示（Museの画面の内側）ではマイクの許可が内側まで渡らず、声を拾えないことがあります。その場合は理由を画面に出し、文字入力とキーボードのマイクへ案内します（何度押しても開始を繰り返さないようになりました）。</p>
+          <p style="margin-top:10px;">声で話しかけると声で返します（対応ブラウザのみ）。返事の声は、頭脳のキーが設定されていれば <b>OpenAIの自然な声</b> で読み上げます（「頭脳の設定」で声を選べます）。キーが無い時や通信が切れた時は、ブラウザーの標準の声に自動で戻ります。マイクボタンはオン・オフ式で、オンの間は聞き取りを続け、言葉が1秒途切れたら返事をし、返事が終わるとまた聞き取りに戻ります。<b>iPhoneでは</b>、ブラウザの音声認識の代わりに<b>録音→OpenAIの文字起こし（Whisper）</b>で聞き取ります（録音し、無音が約1.2秒続いた区間を文字にします。頭脳と同じキーを使い、声が無い区間は送りません）。「終わり」「終了」「マイクオフ」「ありがとう」だけを言うとマイクが閉じます。ただし今の表示（Museの画面の内側）ではマイクの許可が内側まで渡らず、声を拾えないことがあります。その場合は理由を画面に出し、文字入力とキーボードのマイクへ案内します（何度押しても開始を繰り返さないようになりました）。</p>
           <p style="margin-top:10px;">文字では、時刻・日付・進行中の仕事に加えて、<b>計算</b>（「12×34は？」「200の15%は？」、単位の換算も）、<b>タイマー</b>（「3分タイマー」）、<b>メモ</b>（「メモして：○○」／「メモを見せて」）、<b>会社と採用の案内</b>にも答えられるようになりました。決まった型に当たらない自由な質問は、<b>頭脳（OpenAI API）</b>が答えます。コンソールの「頭脳の設定」からAPIキーを入れてください（キーはこのPCの中にだけ保存され、OpenAI以外へは送りません）。会話の文脈は直近10往復まで保ちます。メールや予定、機械への接続は次の段階で足していきます。</p>
         </section>
 
@@ -648,6 +652,7 @@
           idle:     { label:"待機中",     sub:"お呼びでしょうか。話しかけてください。" },
           listening:{ label:"聞き取り中", sub:"聞いています… 言葉が1秒途切れたら返事をします。閉じる時はもう一度マイクを押してください。" },
           thinking: { label:"考え中",     sub:"少しお待ちください…" },
+          transcribing:{ label:"文字にしています", sub:"声を文字にしています…" },
           speaking: { label:"応答中",     sub:"お答えしています。" }
         };
         function setState(name){
@@ -1550,6 +1555,87 @@
         })();
         refreshSettingsUI();
 
+        /* =========================================================
+           Transcription connection — iPhone ONLY. The recorded
+           utterance is sent to OpenAI's transcription endpoint
+           (whisper-1, Japanese) with the SAME saved key as the
+           brain, and the returned text is handed to the exact same
+           conversation flow a recognised utterance uses. Success
+           and failure are each written to the VOICE LOG once, so
+           the diagnostics show the path works without repeating.
+           ========================================================= */
+        var Transcribe = (function(){
+          var ENDPOINT = "https://api.openai.com/v1/audio/transcriptions";
+          var okLogged = false, failLogged = false;
+          function extFor(type){
+            if (!type) return "m4a";
+            if (type.indexOf("mp4") >= 0) return "m4a";
+            if (type.indexOf("webm") >= 0) return "webm";
+            if (type.indexOf("wav") >= 0) return "wav";
+            if (type.indexOf("mpeg") >= 0 || type.indexOf("mp3") >= 0) return "mp3";
+            if (type.indexOf("ogg") >= 0) return "ogg";
+            return "m4a";
+          }
+          /* Resolves with the transcribed text. Rejects with
+             { fatal, keyIssue, raw }: key problems are fatal (the
+             session closes with guidance to the settings); other
+             failures are not (the segment is dropped once, never
+             resent, and listening resumes). */
+          function transcribe(blob){
+            return new Promise(function(resolve, reject){
+              var key = Brain.getKey();
+              if (!key){
+                reject({ fatal:true, keyIssue:true, raw:"transcription: APIキー未設定" });
+                return;
+              }
+              var fd = new FormData();
+              fd.append("file", blob, "speech." + extFor(blob.type || ""));
+              fd.append("model", "whisper-1");
+              fd.append("language", "ja");
+              var ctrl = ("AbortController" in window) ? new AbortController() : null;
+              var to = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, 45000) : null;
+              var opts = {
+                method: "POST",
+                headers: { "Authorization": "Bearer " + key },
+                body: fd
+              };
+              if (ctrl) opts.signal = ctrl.signal;
+              fetch(ENDPOINT, opts).then(function(res){
+                if (to) clearTimeout(to);
+                return res.text().then(function(bodyText){
+                  var data = null;
+                  try{ data = JSON.parse(bodyText); }catch(e){}
+                  if (res.ok && data && typeof data.text === "string"){
+                    if (!okLogged){
+                      okLogged = true;
+                      addVoiceDiagNote("文字起こし方式（whisper-1 / ja）: 文字起こしが成功しました。開始方式は文字起こし方式です。");
+                    }
+                    resolve(data.text);
+                    return;
+                  }
+                  if (!failLogged){
+                    failLogged = true;
+                    addVoiceDiagNote("文字起こし方式（whisper-1 / ja）: 失敗 HTTP " + res.status + " / " + String(bodyText || "").slice(0, 200));
+                  }
+                  if (res.status === 401){
+                    reject({ fatal:true, keyIssue:true, raw:"transcription: HTTP 401 / " + String(bodyText || "").slice(0, 200) });
+                  } else {
+                    reject({ fatal:false, raw:"transcription: HTTP " + res.status });
+                  }
+                });
+              }).catch(function(err){
+                if (to) clearTimeout(to);
+                if (!failLogged){
+                  failLogged = true;
+                  addVoiceDiagNote("文字起こし方式: 通信エラー " + ((err && err.name) ? err.name : "Error"));
+                }
+                reject({ fatal:false, raw:"transcription: " + ((err && err.name) ? err.name : "Error") });
+              });
+            });
+          }
+          return { transcribe: transcribe };
+        })();
+
         var busy = false;
         function deliverReply(reply, done){
           addMsg("ai", "MYU", reply);
@@ -1654,7 +1740,7 @@
           }
           html += "<div class='vn-diag'><b>環境診断</b><br>" +
             "音声認識: " + escHtml(srTxt) + "<br>" +
-            "開始方式: " + (IS_IOS ? "iOS方式（continuous OFF・一文ごとに開始し直す）" : "連続方式（continuous ON）") + "<br>" +
+            "開始方式: " + (IS_IOS ? "文字起こし方式（iOS：録音 → OpenAI Whisper）" : "連続方式（continuous ON）") + "<br>" +
             "マイク取得: " + escHtml(gumTxt) + "<br>" +
             "HTTPS（安全な接続）: " + escHtml(secTxt) + (proto ? " / protocol: " + escHtml(proto) : "") + "<br>" +
             "UA: " + escHtml(navigator.userAgent || "") + "</div>";
@@ -1670,6 +1756,17 @@
         voiceNoticeClose.addEventListener("click", hideVoiceNotice);
 
         function voiceUnsupportedReason(){
+          if (IS_IOS){
+            /* iOS uses the transcription path, not SpeechRecognition:
+               what it needs is mic capture (getUserMedia) over HTTPS. */
+            if (window.isSecureContext === false){
+              return "このページが安全な接続（HTTPS）で開かれていないため、ブラウザがマイクを止めています。";
+            }
+            if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
+              return "この環境では録音（マイクの取得）が使えないため、文字起こし方式の音声入力が使えません。";
+            }
+            return null;
+          }
           if (window.isSecureContext === false){
             return "このページが安全な接続（HTTPS）で開かれていないため、ブラウザがマイクと音声認識を止めています。";
           }
@@ -1729,12 +1826,15 @@
         }
         function renderListenSub(){
           if (!micOn || phase !== "listening") return;
+          if (IS_IOS && iosTranscribing) return; /* keep the "文字にしています" line up */
           var sec = Math.max(0, Math.floor((Date.now() - listenStart) / 1000));
           var heard = utteranceText();
           if (heard){
             stateSub.textContent = "聞き取り中（" + sec + "秒）：「" + heard + "」 言葉が1秒途切れたら返事をします。";
           } else {
-            stateSub.textContent = "聞いています（" + sec + "秒）… そのまま話してください。言葉が1秒途切れたら返事をします。閉じる時はもう一度マイクを押すか、「終わり」だけを言ってください。";
+            stateSub.textContent = IS_IOS
+              ? "聞いています（" + sec + "秒）… そのまま話してください。無音が約1.2秒続くと文字起こしして返事をします。閉じる時はもう一度マイクを押すか、「終わり」だけを言ってください。"
+              : "聞いています（" + sec + "秒）… そのまま話してください。言葉が1秒途切れたら返事をします。閉じる時はもう一度マイクを押すか、「終わり」だけを言ってください。";
           }
         }
         /* Delivery watchdog: runs while the session is on and checks
@@ -1764,6 +1864,7 @@
           clearSessionTimers();
           var r = rec; rec = null;
           if (r){ try{ r.abort(); }catch(e){} }
+          if (IS_IOS) iosStopSession();
           /* Stop whichever voice is playing: the OpenAI TTS audio
              and/or the browser fallback voice. */
           try{ if (typeof Voice !== "undefined" && Voice && Voice.stop) Voice.stop(); }catch(e){}
@@ -1841,6 +1942,10 @@
           /* Quiet the rings' voice level while replying, so the
              reply animation takes over. */
           stopMicLevel();
+          /* iPhone: pause recording while the reply is spoken, so
+             the page never transcribes its own voice. Listening
+             (and recording) resumes from resumeListening(). */
+          if (IS_IOS) iosPauseRecording();
           var r = rec;
           if (r){ try{ r.abort(); }catch(e){} }
           recording = false;
@@ -1878,6 +1983,7 @@
           accFinal = ""; interimNow = ""; lastHeardAt = 0;
           setState("listening");
           renderListenSub();
+          if (IS_IOS){ iosStartListening(); return; }
           startOneRecognition();
           startMicLevel();
         }
@@ -2097,6 +2203,7 @@
           setMicUI(true);
           if (elapsedTimer) clearInterval(elapsedTimer);
           elapsedTimer = setInterval(sessionTick, 500);
+          if (IS_IOS){ iosAcquireAndListen(); return; }
           resumeListening();
         }
 
@@ -2171,6 +2278,7 @@
           }
           var target;
           if (speakingNow) target = synthLevel(performance.now());
+          else if (IS_IOS && micOn && phase === "listening") target = iosLevelRaw;
           else if (micOn && phase === "listening")
             target = (Date.now() - lastVoiceAt < 350) ? synthLevel(performance.now()) : 0;
           else target = 0;
@@ -2197,6 +2305,292 @@
           lastVoiceAt = 0;
           if (levelRAF !== null){ cancelAnimationFrame(levelRAF); levelRAF = null; }
           resetLevelVisual();
+        }
+
+        /* =========================================================
+           iPhone ONLY — transcription voice input.
+           iOS Safari starts SpeechRecognition but never delivers a
+           single result or error, so on iOS the listening path is
+           rebuilt on recording instead:
+           - ONE getUserMedia({audio}) call per mic-ON session is
+             the listening itself (its permission prompt is the one
+             and only mic prompt; nothing else opens the mic).
+           - The same stream feeds an AnalyserNode: loudness both
+             drives the rings (iosLevelRaw, read by the level loop)
+             and segments speech — speech followed by ~1.2s of
+             silence cuts one utterance, 30s is the hard cap, and a
+             stretch with no speech at all is discarded unheard
+             (never sent, never billed).
+           - Recording is MediaRecorder (audio/mp4 on iOS) when
+             available, otherwise WebAudio capture encoded as WAV —
+             both are formats the transcription endpoint accepts.
+           - The segment goes to Transcribe (whisper-1, ja, the
+             brain's key) and the returned text enters the very
+             same flow as a recognised utterance (deliverUtterance:
+             fixed patterns first, then the brain; a lone closing
+             word still closes the mic).
+           - While a reply is spoken, recording is paused
+             (deliverUtterance → iosPauseRecording) so the page
+             never transcribes its own voice; resumeListening
+             restarts it when the reply ends.
+           PC / Android never touch any of this: they keep the
+           SpeechRecognition session above, unchanged.
+           ========================================================= */
+        var iosStream = null, iosCtx = null, iosSource = null, iosAnalyser = null;
+        var iosRecorder = null, iosChunks = [], iosSegStopCb = null;
+        var iosProc = null, iosGain = null, iosWavBuffers = [];
+        var iosSegActive = false, iosSegSpeech = false, iosSegStart = 0, iosLastLoudAt = 0;
+        var iosVadTimer = null, iosTranscribing = false, iosLevelRaw = 0;
+
+        function iosAcquireAndListen(){
+          setState("listening");
+          stateSub.textContent = "マイクの許可を確認しています…";
+          if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
+            closeSession();
+            voiceErrorNotice("audio-capture", "getUserMedia: なし（録音が使えません）");
+            return;
+          }
+          navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream){
+            if (!micOn){
+              try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+              return;
+            }
+            iosStream = stream;
+            iosEnsureGraph();
+            resumeListening();
+          }).catch(function(err){
+            var name = (err && err.name) ? String(err.name) : "Error";
+            var code = (name === "NotAllowedError") ? "not-allowed" : "audio-capture";
+            closeSession();
+            voiceErrorNotice(code, "getUserMedia: " + name);
+          });
+        }
+        function iosEnsureGraph(){
+          if (iosCtx){
+            if (iosCtx.state === "suspended"){ try{ iosCtx.resume(); }catch(e){} }
+            return;
+          }
+          var AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC || !iosStream) return;
+          iosCtx = new AC();
+          iosSource = iosCtx.createMediaStreamSource(iosStream);
+          iosAnalyser = iosCtx.createAnalyser();
+          iosAnalyser.fftSize = 512;
+          iosSource.connect(iosAnalyser);
+          if (!window.MediaRecorder){
+            /* WAV fallback capture: raw samples are buffered only
+               while a segment is active, then encoded on cut. The
+               zero-gain sink keeps the processor running without
+               playing the mic back through the speaker. */
+            iosGain = iosCtx.createGain();
+            iosGain.gain.value = 0;
+            iosProc = iosCtx.createScriptProcessor(4096, 1, 1);
+            iosProc.onaudioprocess = function(e){
+              if (iosSegActive){
+                var d = e.inputBuffer.getChannelData(0);
+                iosWavBuffers.push(new Float32Array(d));
+              }
+            };
+            iosSource.connect(iosProc);
+            iosProc.connect(iosGain);
+            iosGain.connect(iosCtx.destination);
+          }
+        }
+        function iosStartListening(){
+          if (!iosStream){ iosAcquireAndListen(); return; }
+          if (iosCtx && iosCtx.state === "suspended"){ try{ iosCtx.resume(); }catch(e){} }
+          setState("listening");
+          renderListenSub();
+          iosStartSegment();
+          iosStartVad();
+          startMicLevel();
+        }
+        function iosMimeOpt(){
+          var prefs = ["audio/mp4", "audio/webm", "audio/ogg"];
+          for (var i = 0; i < prefs.length; i++){
+            try{ if (MediaRecorder.isTypeSupported(prefs[i])) return { mimeType: prefs[i] }; }catch(e){}
+          }
+          return undefined;
+        }
+        function iosStartSegment(){
+          if (iosSegActive || iosTranscribing || !micOn) return;
+          iosSegActive = true;
+          iosSegSpeech = false;
+          iosSegStart = Date.now();
+          iosLastLoudAt = 0;
+          if (window.MediaRecorder && iosStream){
+            iosChunks = [];
+            try{
+              iosRecorder = new MediaRecorder(iosStream, iosMimeOpt());
+              iosRecorder.ondataavailable = function(e){
+                if (e.data && e.data.size) iosChunks.push(e.data);
+              };
+              iosRecorder.onstop = function(){
+                var type = iosRecorder.mimeType || (iosChunks[0] && iosChunks[0].type) || "audio/mp4";
+                var blob = new Blob(iosChunks, { type: type });
+                iosChunks = [];
+                var cb = iosSegStopCb; iosSegStopCb = null;
+                if (cb) cb(blob);
+              };
+              iosRecorder.start(200);
+            }catch(e){
+              iosSegActive = false;
+              iosChunks = [];
+            }
+          } else {
+            iosWavBuffers = [];
+          }
+        }
+        /* Cut the current segment. deliver=true (and speech was
+           heard) hands the audio to transcription; anything else
+           is discarded and a fresh segment starts, so silence is
+           never sent. */
+        function iosEndSegment(deliver){
+          if (!iosSegActive) return;
+          iosSegActive = false;
+          var hadSpeech = iosSegSpeech;
+          var send = !!(deliver && hadSpeech);
+          if (send) iosTranscribing = true;
+          if (window.MediaRecorder && iosRecorder){
+            iosSegStopCb = function(blob){
+              if (send) iosHandleSegment(blob);
+              else if (micOn && phase === "listening" && !iosTranscribing) iosStartSegment();
+            };
+            try{ iosRecorder.stop(); }catch(e){ iosSegStopCb = null; iosTranscribing = false; }
+          } else {
+            var blob2 = (iosWavBuffers && iosWavBuffers.length && iosCtx)
+              ? iosEncodeWav(iosWavBuffers, iosCtx.sampleRate) : null;
+            iosWavBuffers = [];
+            if (send) iosHandleSegment(blob2);
+            else if (micOn && phase === "listening" && !iosTranscribing) iosStartSegment();
+          }
+        }
+        function iosStartVad(){
+          if (iosVadTimer) return;
+          var buf = new Float32Array(512);
+          iosVadTimer = setInterval(function(){
+            if (!micOn || phase !== "listening" || iosTranscribing || !iosAnalyser) return;
+            try{ iosAnalyser.getFloatTimeDomainData(buf); }catch(e){ return; }
+            var sum = 0, i;
+            for (i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+            var rms = Math.sqrt(sum / buf.length);
+            var now = Date.now();
+            if (rms > 0.02){
+              iosSegSpeech = true;
+              iosLastLoudAt = now;
+              lastVoiceAt = now;
+              iosLevelRaw = Math.min(1, rms * 5);
+            } else {
+              iosLevelRaw *= 0.6;
+            }
+            if (!iosSegActive) return;
+            if (iosSegSpeech && iosLastLoudAt && now - iosLastLoudAt >= 1200){
+              iosEndSegment(true);
+            } else if (!iosSegSpeech && now - iosSegStart >= 15000){
+              iosEndSegment(false);
+            } else if (now - iosSegStart >= 30000){
+              iosEndSegment(iosSegSpeech);
+            }
+          }, 100);
+        }
+        function iosHandleSegment(blob){
+          if (!micOn){ iosTranscribing = false; return; }
+          if (!blob || blob.size < 600){
+            /* Too short to hold a word: drop it and keep listening. */
+            iosTranscribing = false;
+            if (phase === "listening"){ setState("listening"); renderListenSub(); iosStartSegment(); }
+            return;
+          }
+          setState("transcribing");
+          stateSub.textContent = "声を文字にしています…";
+          Transcribe.transcribe(blob).then(function(text){
+            iosTranscribing = false;
+            if (!micOn) return;
+            text = (text || "").trim();
+            if (!text){
+              if (phase === "listening"){ setState("listening"); renderListenSub(); iosStartSegment(); }
+              return;
+            }
+            /* Exactly the recognised-utterance path: closing words,
+               fixed patterns, then the brain — unchanged. */
+            deliverUtterance(text);
+          }).catch(function(err){
+            iosTranscribing = false;
+            if (!micOn) return;
+            if (err && err.fatal){
+              /* Key trouble: close the session cleanly and point at
+                 the settings, the same guidance the brain gives. */
+              var rawF = err.raw || "transcription: error";
+              closeSession();
+              if (err.keyIssue){
+                openSettings(true);
+                showVoiceNotice(
+                  "頭脳の設定をご確認ください（文字起こし方式）",
+                  "iPhoneでは、録音した声を OpenAI の文字起こしで文字にします。頭脳と同じAPIキーを使いますので、キーが未設定か、違う・無効になっていると文字起こしができません。「頭脳の設定」でキーをご確認ください。文字入力はいつでも使えます。" +
+                  voiceDiagHTML(rawF) +
+                  "<div style='margin-top:10px;'>" + DICTATION_GUIDE + "</div>"
+                );
+                addNote("文字起こしに使うキーが未設定か無効なため、マイクを止めました。「頭脳の設定」でキーをご確認ください。");
+              } else {
+                voiceErrorNotice("network", rawF);
+              }
+              return;
+            }
+            /* One-off failure: say so once, drop the segment (never
+               resent), and return to listening — no retry loop. */
+            addNote("文字起こしができませんでした（" + ((err && err.raw) ? err.raw : "通信エラー") + "）。その声は送り直さず、聞き取りに戻ります。");
+            if (phase === "listening"){ setState("listening"); renderListenSub(); iosStartSegment(); }
+          });
+        }
+        function iosPauseRecording(){
+          if (iosVadTimer){ clearInterval(iosVadTimer); iosVadTimer = null; }
+          iosLevelRaw = 0;
+          if (iosSegActive){
+            iosSegActive = false;
+            if (window.MediaRecorder && iosRecorder){
+              iosSegStopCb = function(){};
+              try{ iosRecorder.stop(); }catch(e){}
+            }
+            iosWavBuffers = [];
+          }
+        }
+        function iosStopSession(){
+          iosPauseRecording();
+          iosTranscribing = false;
+          if (iosStream){
+            try{ iosStream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+            iosStream = null;
+          }
+          if (iosCtx){
+            try{ iosCtx.close(); }catch(e){}
+            iosCtx = null; iosSource = null; iosAnalyser = null;
+            iosProc = null; iosGain = null; iosRecorder = null;
+          }
+        }
+        /* Encode captured Float32 chunks as a 16-bit PCM WAV
+           (mono, the context's sample rate) — a format the
+           transcription endpoint accepts. */
+        function iosEncodeWav(buffers, sampleRate){
+          var len = 0, i, j;
+          for (i = 0; i < buffers.length; i++) len += buffers[i].length;
+          if (!len) return null;
+          var buf = new ArrayBuffer(44 + len * 2), dv = new DataView(buf);
+          function wstr(off, s){ for (var k = 0; k < s.length; k++) dv.setUint8(off + k, s.charCodeAt(k)); }
+          wstr(0, "RIFF"); dv.setUint32(4, 36 + len * 2, true); wstr(8, "WAVEfmt ");
+          dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+          dv.setUint32(24, sampleRate, true); dv.setUint32(28, sampleRate * 2, true);
+          dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+          wstr(36, "data"); dv.setUint32(40, len * 2, true);
+          var off = 44;
+          for (i = 0; i < buffers.length; i++){
+            var d = buffers[i];
+            for (j = 0; j < d.length; j++){
+              var s = Math.max(-1, Math.min(1, d[j]));
+              dv.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+              off += 2;
+            }
+          }
+          return new Blob([buf], { type: "audio/wav" });
         }
 
         /* Support check on load: if it can never work here, say so up front. */
@@ -2286,8 +2680,10 @@
             input.focus();
             return;
           }
-          /* Unsupported environment: explain, never fail silently. */
-          if (!SR){
+          /* Unsupported environment: explain, never fail silently.
+             (iPhone skips this check: it listens by recording and
+             transcribing, not by SpeechRecognition.) */
+          if (!SR && !IS_IOS){
             var reason = voiceUnsupportedReason() ||
               "今お使いの環境では、このページの音声認識が使えません。";
             showVoiceNotice("この環境では音声入力が使えません", reason + voiceDiagHTML("SpeechRecognition: undefined") + "<div style='margin-top:10px;'>" + DICTATION_GUIDE + "</div>");
@@ -2312,6 +2708,25 @@
              silent. (If a reply were playing, busy would be true and
              the tap would already have returned above.) */
           primeSpeech();
+          /* (The getUserMedia note below is about the recognition
+             path — PC / Android. iPhone's transcription path opens
+             the microphone exactly once per session, inside
+             beginSession → iosAcquireAndListen, and that single
+             stream is the listening itself.) */
+          /* iPhone transcription needs the brain's key: without it
+             the recording could never be transcribed, so guide to
+             the settings first instead of opening the mic. */
+          if (IS_IOS && !Brain.hasKey()){
+            openSettings(true);
+            showVoiceNotice(
+              "頭脳の設定が必要です（文字起こし方式）",
+              "iPhoneでは、録音した声を OpenAI の文字起こしで文字にします。頭脳と同じAPIキーを使いますので、「頭脳の設定」からキーを入れてください。キーが入ればマイクが使えるようになります。文字入力はいつでも使えます。" +
+              voiceDiagHTML("transcription: APIキー未設定") +
+              "<div style='margin-top:10px;'>" + DICTATION_GUIDE + "</div>"
+            );
+            addNote("文字起こし方式には頭脳のAPIキーが必要です。「頭脳の設定」からキーを入れてください。");
+            return;
+          }
           /* Start recognition directly, synchronously inside this
              tap handler, on every platform — and ask for the
              microphone exactly ONCE. Earlier builds also called
