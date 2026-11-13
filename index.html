@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://api.openai.com" />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Orbitron:wght@500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       :root{
         --bg:#02060d;
@@ -304,6 +305,14 @@
       }
       .set-btn.primary{ color:#eafff3; border-color:rgba(47,224,122,.5); background:linear-gradient(135deg, var(--cyan-dim), var(--green-deep)); font-weight:700; }
       .set-status{ font-size:.78rem; color:var(--ink-dim); font-family:var(--mono); min-width:0; overflow-wrap:anywhere; }
+      .set-divider{ border:0; border-top:1px solid var(--line-soft); margin:14px 0 12px; }
+      .set-subtitle{ font-family:var(--disp); font-size:.66rem; letter-spacing:.2em; color:var(--cyan); text-transform:uppercase; margin:0 0 10px; }
+      .gmem-list{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+      .gmem-item{ display:flex; gap:8px; align-items:flex-start; justify-content:space-between; border:1px solid var(--line-soft); background:rgba(3,12,22,.6); padding:8px 10px; border-radius:2px; }
+      .gmem-text{ flex:1 1 auto; min-width:0; overflow-wrap:anywhere; font-size:.86rem; line-height:1.55; color:var(--ink); font-weight:300; }
+      .gmem-text small{ display:block; color:var(--ink-faint); font-family:var(--mono); font-size:.68rem; margin-top:2px; }
+      .gmem-del{ flex:none; min-height:2rem; padding:0 10px; border:1px solid rgba(239,81,72,.45); background:transparent; color:#ffb3ad; font-size:.76rem; border-radius:2px; }
+      .gmem-empty{ font-size:.82rem; color:var(--ink-faint); font-weight:300; line-height:1.6; }
 
       .log{ flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px; max-height:520px; }
       .msg{ max-width:90%; padding:9px 12px; border-radius:2px; font-size:.93rem; line-height:1.65; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; font-weight:300; }
@@ -503,7 +512,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 19v3"/></svg>
             </button>
             <span class="stage-mic-label" id="micLabel">タップしてマイク ON</span>
-            <span class="stage-mic-hint">オンの間は聞き取り続けます。言葉が1秒途切れたら返事をし、終わるとまた聞き取りに戻ります。iPhoneでは録音した声を文字にして聞き取ります（無音が約0.5秒続くと文字起こしへ送ります）。閉じる時はもう一度押すか、「マイクオフ」<b>だけ</b>を言ってください（文の中で使うだけでは閉じません）</span>
+            <span class="stage-mic-hint">オンの間は聞き取り続けます。言葉が1秒途切れたら返事をし、終わるとまた聞き取りに戻ります。iPhoneでは録音した声を文字にして聞き取ります（無音が約0.5秒続くと文字起こしへ送ります）。読み上げ中は録音を止め、終わると聞き取りに戻ります。閉じる時はもう一度押すか、「マイクオフ」<b>だけ</b>を言ってください（文の中で使うだけでは閉じません）</span>
           </div>
 
           <div class="stateline">
@@ -559,6 +568,24 @@
               <button class="set-btn" id="keyClear" type="button">キーを消す</button>
               <span class="set-status" id="keyStatus">キー：未設定</span>
             </div>
+
+            <hr class="set-divider" />
+            <p class="set-subtitle">Google Connection — 専用アカウント</p>
+            <div class="set-row">
+              <label for="googleClientIdInput">Google クライアントID（OAuth・Webアプリ用）</label>
+              <input id="googleClientIdInput" type="text" placeholder="xxxxxxxx.apps.googleusercontent.com" autocomplete="off" autocapitalize="off" spellcheck="false" />
+            </div>
+            <p class="set-note">クライアントIDはこの端末の保存領域にだけ保存されます。接続は Google Identity Services のトークン方式で、許可範囲は「えむが作ったファイルだけ（drive.file）」と「予定の読み取りだけ（calendar.readonly）」の2つに絞ります。アクセストークンはメモリ内だけに持ち、保存はしません（約1時間で切れます）。つないでいなくても、今までの機能はそのまま使えます。メール（Gmail）には接続しません。</p>
+            <div class="set-actions">
+              <button class="set-btn" id="googleClientSave" type="button">クライアントIDを保存</button>
+              <button class="set-btn primary" id="googleConnectBtn" type="button">Googleとつなぐ</button>
+              <button class="set-btn" id="googleDisconnectBtn" type="button">切る</button>
+            </div>
+            <div class="set-actions">
+              <span class="set-status" id="googleStatus">Google：未設定（クライアントIDがありません）</span>
+            </div>
+            <p class="set-note" style="margin-top:8px;">覚えたことは、専用アカウントの Drive に「emu_memory.json」というファイルを作って保存します（上限：100件・1件500字まで。古いものから順に頭脳へ渡す文脈は直近30件・合計3,000字まで）。「○○を覚えて」「覚えておいて：○○」と言うと保存します。削除は下の一覧のボタンからだけできます。</p>
+            <div class="gmem-list" id="googleMemoryList" aria-label="覚えたことの一覧"></div>
           </div>
 
           <div class="log" id="log" aria-live="polite"></div>
@@ -582,6 +609,8 @@
             <button class="chip" type="button" data-q="12×34は？">計算の例</button>
             <button class="chip" type="button" data-q="3分タイマー">タイマーの例</button>
             <button class="chip" type="button" data-q="会社について教えて">会社について</button>
+            <button class="chip" type="button" data-q="今日の予定は？">今日の予定</button>
+            <button class="chip" type="button" data-q="明日の予定は？">明日の予定</button>
             <button class="chip" type="button" data-q="FAって何の略？">自由な質問の例</button>
           </div>
 
@@ -608,8 +637,9 @@
         <section class="card panel" aria-label="この試作でできること">
           <h2>この試作でできること</h2>
           <p>姿は <b>同心円のリング</b> です（ロボットの絵は当面お休み）。三重の輪は呼吸するようにゆっくり膨らんだり縮んだりし、線自体も太くなったり細くなったりします。輪ごとにタイミングがずれているので、機械的な点滅ではなく生きているような動きになります。状態（待機中・聞き取り中・考え中・応答中）で、<b>輪の色と呼吸の速さ</b> が変わります（待機中はゆっくり、聞き取り中は少し速く）。マイクがオンの間は、<b>話している間は輪がその場で膨らみ、線も太く</b>なります。静かになると、ゆっくり呼吸の動きに戻ります。こちらが読み上げている間は、話すリズムに合わせた動きになります。</p>
-          <p style="margin-top:10px;">声で話しかけると声で返します（対応ブラウザのみ）。返事の声は、頭脳のキーが設定されていれば <b>OpenAIの自然な声</b> で読み上げます（「頭脳の設定」で声を選べます）。キーが無い時や通信が切れた時は、ブラウザーの標準の声に自動で戻ります。マイクボタンはオン・オフ式で、オンの間は聞き取りを続け、言葉が1秒途切れたら返事をし、返事が終わるとまた聞き取りに戻ります。返事の読み上げ中に話しかけると、読み上げを止めてその発話を受け付けます（割り込み）。「止めて」だけでも読み上げが止まります。<b>iPhoneでは</b>、ブラウザの音声認識の代わりに<b>録音→OpenAIの文字起こし</b>で聞き取ります（録音し、無音が約0.5秒続いた区間を文字にします。頭脳と同じキーを使い、声が無い区間は送りません）。「マイクオフ」だけを言うとマイクが閉じます。ただし今の表示（Museの画面の内側）ではマイクの許可が内側まで渡らず、声を拾えないことがあります。その場合は理由を画面に出し、文字入力とキーボードのマイクへ案内します（何度押しても開始を繰り返さないようになりました）。</p>
-          <p style="margin-top:10px;">文字では、時刻・日付・進行中の仕事に加えて、<b>計算</b>（「12×34は？」「200の15%は？」、単位の換算も）、<b>タイマー</b>（「3分タイマー」）、<b>メモ</b>（「メモして：○○」／「メモを見せて」）、<b>会社と採用の案内</b>にも答えられるようになりました。決まった型に当たらない自由な質問は、<b>頭脳（OpenAI API）</b>が答えます。コンソールの「頭脳の設定」からAPIキーを入れてください（キーはこのPCの中にだけ保存され、OpenAI以外へは送りません）。会話の文脈は直近10往復まで保ちます。メールや予定、機械への接続は次の段階で足していきます。</p>
+          <p style="margin-top:10px;">声で話しかけると声で返します（対応ブラウザのみ）。返事の声は、頭脳のキーが設定されていれば <b>OpenAIの自然な声</b> で読み上げます（「頭脳の設定」で声を選べます）。キーが無い時や通信が切れた時は、ブラウザーの標準の声に自動で戻ります。マイクボタンはオン・オフ式で、オンの間は聞き取りを続け、言葉が1秒途切れたら返事をし、返事が終わるとまた聞き取りに戻ります。PC／Androidでは、返事の読み上げ中に話しかけると、読み上げを止めてその発話を受け付けます（割り込み）。「止めて」だけでも読み上げが止まります。<b>iPhoneでは</b>、ブラウザの音声認識の代わりに<b>録音→OpenAIの文字起こし</b>で聞き取ります（録音し、無音が約0.5秒続いた区間を文字にします。頭脳と同じキーを使い、声が無い区間は送りません）。iPhoneでは読み上げの間、録音とマイクを完全に止めます（録音しながら再生するとiPhoneの仕様で音量が大きく下がるため）。その間は声での割り込みはできませんが、読み上げが終わると自動で聞き取りに戻ります。「マイクオフ」だけを言うとマイクが閉じます。ただし今の表示（Museの画面の内側）ではマイクの許可が内側まで渡らず、声を拾えないことがあります。その場合は理由を画面に出し、文字入力とキーボードのマイクへ案内します（何度押しても開始を繰り返さないようになりました）。</p>
+          <p style="margin-top:10px;">文字では、時刻・日付・進行中の仕事に加えて、<b>計算</b>（「12×34は？」「200の15%は？」、単位の換算も）、<b>タイマー</b>（「3分タイマー」）、<b>メモ</b>（「メモして：○○」／「メモを見せて」）、<b>会社と採用の案内</b>にも答えられるようになりました。決まった型に当たらない自由な質問は、<b>頭脳（OpenAI API）</b>が答えます。コンソールの「頭脳の設定」からAPIキーを入れてください（キーはこのPCの中にだけ保存され、OpenAI以外へは送りません）。会話の文脈は直近10往復まで保ちます。</p>
+          <p style="margin-top:10px;"><b>Google接続（任意）</b>：「頭脳の設定」の下段で、えむ専用Googleアカウントとつなげます。つなぐと、<b>今日・明日の予定</b>（読み取りだけ）を答え、「○○を覚えて」で言ったことを専用アカウントの Drive の <b>emu_memory.json</b> に貯めて、次の質問の文脈に使います。つないでいない時は、予定と「覚えて」は正直に「つないでいません」と答え、他の機能は今まで通り動きます。機械への接続はまだありません。</p>
         </section>
 
         <section class="card panel" aria-label="話しかけ方の例">
@@ -625,6 +655,8 @@
             <li>「12月25日は何曜日？」「12月25日まであと何日？」</li>
             <li>「3分タイマー」「タイマーを止めて」</li>
             <li>「メモして：○○」「メモを見せて」</li>
+            <li>「○○を覚えて」「覚えておいて：○○」— Google接続時のみ（Driveに保存）</li>
+            <li>「今日の予定は？」「明日の予定は？」— Google接続時のみ</li>
             <li>「会社について教えて」「採用について教えて」</li>
             <li>自由な質問全般（例：「FAって何の略？」）—「頭脳の設定」でキーを入れた場合</li>
             <li>「おはよう」「ありがとう」</li>
@@ -1016,8 +1048,15 @@
           if (/採用|求人|募集|スタッフ募集|働き/.test(t)){
             return "採用は、機械設計・電気設計／制御設計・装置組立・営業を募集しています。正社員で月給19万円〜40万円（電気・制御設計は経験者の募集で25万円〜40万円）、勤務地は大分県杵築市猪尾、8時〜17時・週休2日です。未経験の方も相談できます。興味があれば少しずつ覚えていけますし、丁寧にお教えします。";
           }
-          if (/メール|予定|カレンダー|スケジュール/.test(t)){
-            return "すみません、メールと予定への接続はまだつないでいません。次の段階で足す予定です。今は時刻・日付・進行中の仕事・計算・タイマー・メモにお答えできます。";
+          if (/メール/.test(t)){
+            return "メール（Gmail）には接続していません。今つながるのは、Google接続時の予定の読み取りと、覚えたことの保存だけです。";
+          }
+          if (/予定|カレンダー|スケジュール/.test(t)){
+            var gConn = (typeof GoogleConn !== "undefined" && GoogleConn) ? GoogleConn.isConnected() : false;
+            if (gConn){
+              return "Googleカレンダーとつながっています。「今日の予定は？」「明日の予定は？」と聞いていただければ、その日の予定をお答えします。";
+            }
+            return "予定は Google とつないでいません。「頭脳の設定」のGoogle接続でクライアントIDを入れてつなぐと、今日と明日の予定を読み取れるようになります。今は時刻・日付・進行中の仕事・計算・タイマー・メモにお答えできます。";
           }
           if (/仕事|案件|進捗|状況|タスク|やること/.test(t)){
             return "進行中の主なものは4つです。工事管理システムREV.148とスマホ修正版11が実機確認待ち、「今日の機構 #2」が承認待ち、FR5はカップの微調整が残っています。StepToDxf v1.34は交付済みです。";
@@ -1031,7 +1070,7 @@
           if (/ありがとう/.test(t)){ return "どういたしまして。いつでも声をかけてください。"; }
           if (/おやすみ/.test(t)){ return "おやすみなさい、丸山さん。今日もお疲れさまでした。"; }
           if (/できること|使い方|ヘルプ|help/i.test(t)){
-            return "今の試作でできるのは、時刻・日付（「12月25日は何曜日？」のような日付計算も）、進行中の仕事の報告、計算（四則・割合・単位換算）、タイマー（「3分タイマー」）、メモ（「メモして：○○」）、会社と採用の案内です。それ以外の自由な質問は、「頭脳の設定」でOpenAI APIキーを入れると頭脳が答えます。下のボタンからも試せます。メールや予定との接続は、次の段階で足していきます。";
+            return "今の試作でできるのは、時刻・日付（「12月25日は何曜日？」のような日付計算も）、進行中の仕事の報告、計算（四則・割合・単位換算）、タイマー（「3分タイマー」）、メモ（「メモして：○○」）、会社と採用の案内です。それ以外の自由な質問は、「頭脳の設定」でOpenAI APIキーを入れると頭脳が答えます。Googleとつなぐと、今日・明日の予定と、「○○を覚えて」での保存も使えます。下のボタンからも試せます。";
           }
           if (/天気/.test(t)){
             return "すみません、天気の取得はまだつないでいません。次の段階で足す候補に入れておきます。";
@@ -1136,6 +1175,311 @@
         }
 
         /* =========================================================
+           Google connection — dedicated account only.
+           GIS token client, scopes drive.file + calendar.readonly.
+           Access token lives in memory ONLY (never localStorage).
+           Client ID and Drive file ID are the only values kept in
+           localStorage. Drive file: emu_memory.json {memories:[{text,at}]}
+           Limits: store max 100 items / 500 chars each; brain
+           context = latest 30 items / 3,000 chars total.
+           ========================================================= */
+        var GoogleConn = (function(){
+          var LS_CLIENT = "emu.google.clientId", LS_FILE = "emu.google.fileId";
+          var SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.readonly";
+          var MAX_ITEMS = 100, MAX_ITEM_CHARS = 500, CTX_ITEMS = 30, CTX_CHARS = 3000;
+          var memClient = "", memFileId = "";
+          var token = null, tokenExpiry = 0, userEmail = "", fileId = null, memories = [];
+          var tokenClient = null, pendingResolve = null, pendingReject = null, lastError = "";
+          function lsGet(k){ try{ return window.localStorage.getItem(k); }catch(e){ return null; } }
+          function lsSet(k,v){ try{ if(v) window.localStorage.setItem(k,v); else window.localStorage.removeItem(k); }catch(e){} }
+          function getClientId(){ var v = lsGet(LS_CLIENT); return (v && v!=="") ? v : memClient; }
+          function setClientId(v){ memClient = (v||"").trim(); lsSet(LS_CLIENT, memClient); tokenClient = null; refreshGoogleUI(); }
+          function getFileIdStored(){ var v = lsGet(LS_FILE); return (v && v!=="") ? v : memFileId; }
+          function setFileIdStored(v){ memFileId = v||""; fileId = v||null; lsSet(LS_FILE, memFileId); }
+          function getState(){
+            if (!getClientId()) return "not_configured";
+            if (token && Date.now() < tokenExpiry) return "connected";
+            if (token && Date.now() >= tokenExpiry) return "expired";
+            if (lastError === "expired") return "expired";
+            return "disconnected";
+          }
+          function getStateLabel(){
+            var s = getState();
+            if (s==="not_configured") return "未設定";
+            if (s==="connected") return "接続中" + (userEmail ? "（"+userEmail+"）" : "");
+            if (s==="expired") return "期限切れ";
+            return "未接続";
+          }
+          function isConnected(){ return getState()==="connected"; }
+          function waitForGIS(cb, tries){
+            tries = tries||0;
+            if (window.google && google.accounts && google.accounts.oauth2){ cb(true); return; }
+            if (tries>40){ cb(false); return; }
+            setTimeout(function(){ waitForGIS(cb, tries+1); }, 250);
+          }
+          function ensureTokenClient(ok){
+            if (tokenClient){ ok(true); return; }
+            waitForGIS(function(ready){
+              if (!ready){ ok(false); return; }
+              try{
+                tokenClient = google.accounts.oauth2.initTokenClient({
+                  client_id: getClientId(), scope: SCOPES,
+                  callback: function(resp){
+                    var res = pendingResolve, rej = pendingReject; pendingResolve=null; pendingReject=null;
+                    if (!resp || resp.error){
+                      lastError = resp && resp.error ? String(resp.error) : "token_error";
+                      if (lastError==="interaction_required" || lastError==="login_required" || lastError==="consent_required") lastError="expired";
+                      if (rej) rej(new Error(lastError));
+                      refreshGoogleUI(); return;
+                    }
+                    token = resp.access_token;
+                    tokenExpiry = Date.now() + ((resp.expires_in||3600)*1000) - 60000;
+                    lastError = "";
+                    if (res) res(token);
+                    refreshGoogleUI();
+                  },
+                  error_callback: function(err){
+                    var rej = pendingReject; pendingResolve=null; pendingReject=null;
+                    lastError = err && err.type ? String(err.type) : "gis_error";
+                    if (rej) rej(new Error(lastError));
+                    refreshGoogleUI();
+                  }
+                });
+                ok(true);
+              }catch(e){ ok(false); }
+            });
+          }
+          function requestToken(silent){
+            return new Promise(function(resolve, reject){
+              if (!getClientId()){ reject(new Error("no_client_id")); return; }
+              ensureTokenClient(function(ready){
+                if (!ready){ reject(new Error("gis_not_loaded")); return; }
+                pendingResolve = resolve; pendingReject = reject;
+                try{ tokenClient.requestAccessToken({ prompt: silent ? "" : "consent" }); }
+                catch(e){ pendingResolve=null; pendingReject=null; reject(e); }
+                setTimeout(function(){
+                  if (pendingResolve===resolve){ pendingResolve=null; pendingReject=null; reject(new Error("token_timeout")); }
+                }, 60000);
+              });
+            });
+          }
+          function fetchAccountLabel(){
+            if (!token) return Promise.resolve("");
+            /* Scopes stay at drive.file + calendar.readonly only, so
+               OpenID userinfo is not available. The primary calendar's
+               id (Calendar API calendars.get "primary", readable with
+               calendar.readonly) is the account email itself on
+               personal accounts, so use it as the connected-account
+               label. If it cannot be read, the UI simply shows
+               "接続中" with no address. */
+            return apiFetch("https://www.googleapis.com/calendar/v3/calendars/primary", {})
+              .then(function(r){ return r.ok ? r.json() : null; })
+              .then(function(d){ if (d && d.id) userEmail = String(d.id); refreshGoogleUI(); return userEmail; })
+              .catch(function(){ return userEmail; });
+          }
+          function apiFetch(url, opts, retry){
+            opts = opts||{}; opts.headers = opts.headers||{};
+            opts.headers["Authorization"] = "Bearer "+token;
+            return fetch(url, opts).then(function(res){
+              if (res.status===401 && !retry){
+                tokenExpiry = 0; lastError="expired"; refreshGoogleUI();
+                return requestToken(true).then(function(){ return apiFetch(url, opts, true); })
+                  .catch(function(){ throw new Error("expired"); });
+              }
+              return res;
+            });
+          }
+          function ensureDriveFile(){
+            var stored = getFileIdStored();
+            function useId(id){ setFileIdStored(id); return loadMemories(); }
+            if (stored){
+              return apiFetch("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(stored)+"?fields=id,name", {})
+                .then(function(r){ if (r.ok) return useId(stored); throw new Error("not_found"); })
+                .catch(function(){ setFileIdStored(""); return searchOrCreate(); });
+            }
+            return searchOrCreate();
+          }
+          function searchOrCreate(){
+            var q = encodeURIComponent("name='emu_memory.json' and trashed=false");
+            return apiFetch("https://www.googleapis.com/drive/v3/files?q="+q+"&spaces=drive&fields=files(id,name)", {})
+              .then(function(r){ return r.json(); })
+              .then(function(d){
+                if (d && d.files && d.files.length){ return useId(d.files[0].id); }
+                return createFile();
+              });
+            function useId(id){ setFileIdStored(id); return loadMemories(); }
+          }
+          function createFile(){
+            var boundary = "emu"+Math.random().toString(36).slice(2)+Date.now();
+            var meta = JSON.stringify({ name:"emu_memory.json", mimeType:"application/json" });
+            var content = JSON.stringify({ memories: [] }, null, 2);
+            var body = "--"+boundary+"\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"+meta+"\r\n--"+boundary+"\r\nContent-Type: application/json\r\n\r\n"+content+"\r\n--"+boundary+"--";
+            return apiFetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+              method:"POST", headers:{ "Content-Type":"multipart/related; boundary="+boundary }, body: body
+            }).then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error("create_failed"); return d; }); })
+              .then(function(d){ setFileIdStored(d.id); memories=[]; renderGoogleMemories(); updateBrainMemoryContext(); return d.id; });
+          }
+          function loadMemories(){
+            var id = getFileIdStored(); if (!id) return Promise.resolve(memories);
+            return apiFetch("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(id)+"?alt=media", {})
+              .then(function(r){ return r.ok ? r.text() : ""; })
+              .then(function(txt){
+                try{
+                  var d = JSON.parse(txt||"{}");
+                  var arr = Array.isArray(d) ? d : (d.memories||[]);
+                  memories = arr.filter(function(m){ return m && typeof m.text==="string"; }).map(function(m){ return { text:String(m.text).slice(0,MAX_ITEM_CHARS), at:String(m.at||"") }; });
+                }catch(e){ memories=[]; }
+                renderGoogleMemories(); updateBrainMemoryContext(); return memories;
+              }).catch(function(){ renderGoogleMemories(); return memories; });
+          }
+          function saveMemories(){
+            var id = getFileIdStored(); if (!id) return Promise.reject(new Error("no_file"));
+            var payload = JSON.stringify({ memories: memories }, null, 2);
+            return apiFetch("https://www.googleapis.com/upload/drive/v3/files/"+encodeURIComponent(id)+"?uploadType=media", {
+              method:"PATCH", headers:{ "Content-Type":"application/json" }, body: payload
+            }).then(function(r){ if(!r.ok) throw new Error("save_failed_"+r.status); renderGoogleMemories(); updateBrainMemoryContext(); return memories; });
+          }
+          function updateBrainMemoryContext(){ /* context is read live by Brain via getContextText() */ }
+          function getContextText(){
+            if (!memories.length) return "";
+            var picked = memories.slice(-CTX_ITEMS);
+            var lines=[], total=0;
+            for (var i=0;i<picked.length;i++){
+              var line = "・"+picked[i].text+(picked[i].at ? "（"+picked[i].at+"）" : "");
+              if (total+line.length>CTX_CHARS) break;
+              lines.push(line); total+=line.length;
+            }
+            return lines.join("\n");
+          }
+          function addMemory(text){
+            var clean = String(text||"").trim().slice(0,MAX_ITEM_CHARS);
+            if (!clean) return Promise.reject(new Error("empty"));
+            var now = new Date();
+            var at = now.getFullYear()+"/"+pad(now.getMonth()+1)+"/"+pad(now.getDate())+" "+pad(now.getHours())+":"+pad(now.getMinutes());
+            memories.push({ text: clean, at: at });
+            if (memories.length>MAX_ITEMS) memories = memories.slice(memories.length-MAX_ITEMS);
+            return saveMemories().then(function(){ return clean; });
+          }
+          function deleteMemory(index){
+            if (index<0 || index>=memories.length) return Promise.resolve(false);
+            memories.splice(index,1);
+            return saveMemories().then(function(){ return true; });
+          }
+          function connect(){
+            if (!getClientId()){ refreshGoogleUI(); return Promise.reject(new Error("no_client_id")); }
+            return requestToken(false).then(function(){
+              return fetchAccountLabel().then(function(){ return ensureDriveFile(); }).then(function(){ refreshGoogleUI(); return true; });
+            });
+          }
+          function silentReconnect(){
+            if (!getClientId() || isConnected()) return Promise.resolve(isConnected());
+            return requestToken(true).then(function(){ return fetchAccountLabel().then(function(){ return ensureDriveFile(); }).then(function(){ return true; }); })
+              .catch(function(){ lastError="expired"; refreshGoogleUI(); return false; });
+          }
+          function disconnect(){
+            var t = token; token=null; tokenExpiry=0; userEmail=""; memories=[]; renderGoogleMemories();
+            if (t && window.google && google.accounts && google.accounts.oauth2 && google.accounts.oauth2.revoke){
+              try{ google.accounts.oauth2.revoke(t, function(){}); }catch(e){}
+            }
+            refreshGoogleUI();
+          }
+          function fetchSchedule(dayOffset){
+            var base = new Date(); base.setDate(base.getDate()+dayOffset);
+            var start = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 0,0,0);
+            var end = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23,59,59);
+            var url = "https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin="+encodeURIComponent(start.toISOString())+"&timeMax="+encodeURIComponent(end.toISOString())+"&singleEvents=true&orderBy=startTime";
+            return apiFetch(url, {}).then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error("cal_"+r.status); return d; }); })
+              .then(function(d){
+                var items = (d.items||[]);
+                var dayLabel = dayOffset===0 ? "今日" : "明日の";
+                if (!items.length) return dayLabel+"予定はありません。";
+                var parts = items.slice(0,8).map(function(ev){
+                  var title = String(ev.summary||"（件名なし）");
+                  var when = "";
+                  if (ev.start && ev.start.dateTime){ var dt=new Date(ev.start.dateTime); when = dt.getHours()+"時"+(dt.getMinutes()? dt.getMinutes()+"分":"")+"から"; }
+                  else if (ev.start && ev.start.date){ when="終日"; }
+                  return (when? when+" ":"")+title;
+                });
+                var more = items.length>8 ? "、ほか"+(items.length-8)+"件" : "";
+                return dayLabel+"予定は"+items.length+"件です。"+parts.join("、")+"です"+(more? "（"+more+"）":"")+"。";
+              });
+          }
+          /* expiry watcher: mark expired quietly, try silent once */
+          setInterval(function(){
+            if (token && Date.now()>=tokenExpiry){ lastError="expired"; refreshGoogleUI(); silentReconnect(); }
+          }, 60000);
+          return {
+            getClientId:getClientId, setClientId:setClientId, getState:getState, getStateLabel:getStateLabel,
+            isConnected:isConnected, connect:connect, disconnect:disconnect, silentReconnect:silentReconnect,
+            getEmail:function(){ return userEmail; }, getMemories:function(){ return memories.slice(); },
+            addMemory:addMemory, deleteMemory:deleteMemory, loadMemories:loadMemories,
+            getContextText:getContextText, fetchSchedule:fetchSchedule,
+            limits:{ maxItems:MAX_ITEMS, maxItemChars:MAX_ITEM_CHARS, ctxItems:CTX_ITEMS, ctxChars:CTX_CHARS }
+          };
+        })();
+        function refreshGoogleUI(){
+          var st = $("googleStatus"), list = $("googleMemoryList"), connBtn = $("googleConnectBtn"), cid = $("googleClientIdInput");
+          if (cid && document.activeElement!==cid) cid.value = GoogleConn.getClientId()||"";
+          if (st){
+            var s = GoogleConn.getState(), lbl = GoogleConn.getStateLabel();
+            if (s==="not_configured") st.textContent = "Google：未設定（クライアントIDがありません）";
+            else if (s==="connected") st.textContent = "Google：接続中"+(GoogleConn.getEmail() ? "（"+GoogleConn.getEmail()+"）" : "")+"／覚えたこと "+GoogleConn.getMemories().length+"件";
+            else if (s==="expired") st.textContent = "Google：期限切れ（「Googleとつなぐ」を押してつなぎ直してください）";
+            else st.textContent = "Google：未接続（「Googleとつなぐ」を押してください）";
+          }
+          if (connBtn) connBtn.textContent = GoogleConn.isConnected() ? "つなぎ直す" : "Googleとつなぐ";
+          renderGoogleMemories();
+        }
+        function renderGoogleMemories(){
+          var list = $("googleMemoryList"); if (!list) return;
+          list.innerHTML = "";
+          if (!GoogleConn.isConnected()){
+            var e0=document.createElement("div"); e0.className="gmem-empty";
+            e0.textContent = GoogleConn.getState()==="not_configured" ? "クライアントIDを保存して Google とつなぐと、覚えたことがここに表示されます。" : "Google とつなぐと、覚えたことがここに表示されます。";
+            list.appendChild(e0); return;
+          }
+          var mems = GoogleConn.getMemories();
+          if (!mems.length){
+            var e1=document.createElement("div"); e1.className="gmem-empty"; e1.textContent="覚えたことはまだありません。「○○を覚えて」と言うと保存されます。"; list.appendChild(e1); return;
+          }
+          mems.forEach(function(m, idx){
+            var row=document.createElement("div"); row.className="gmem-item";
+            var tx=document.createElement("div"); tx.className="gmem-text"; tx.textContent=m.text;
+            if (m.at){ var sm=document.createElement("small"); sm.textContent=m.at; tx.appendChild(sm); }
+            var del=document.createElement("button"); del.type="button"; del.className="gmem-del"; del.textContent="削除"; del.setAttribute("data-gmem-del", String(idx));
+            row.appendChild(tx); row.appendChild(del); list.appendChild(row);
+          });
+        }
+        (function wireGoogleUI(){
+          var saveBtn=$("googleClientSave"), connBtn=$("googleConnectBtn"), discBtn=$("googleDisconnectBtn"), cid=$("googleClientIdInput"), list=$("googleMemoryList");
+          if (saveBtn) saveBtn.addEventListener("click", function(){
+            var v = cid ? (cid.value||"").trim() : "";
+            GoogleConn.setClientId(v);
+            addDiagNote("Google: クライアントIDを"+(v?"保存しました":"消しました")+"（この端末のみ）");
+          });
+          if (connBtn) connBtn.addEventListener("click", function(){
+            var v = cid ? (cid.value||"").trim() : "";
+            if (v && v!==GoogleConn.getClientId()) GoogleConn.setClientId(v);
+            if (!GoogleConn.getClientId()){ refreshGoogleUI(); openSettings(false); if($("googleStatus")) $("googleStatus").textContent="Google：クライアントIDを入れてから「Googleとつなぐ」を押してください。"; return; }
+            var st=$("googleStatus"); if(st) st.textContent="Google：接続しています…（Googleの画面で許可してください）";
+            GoogleConn.connect().then(function(){
+              addMsg("ai","MYU","Googleとつながりました"+(GoogleConn.getEmail() ? "（"+GoogleConn.getEmail()+"）" : "")+"。今日・明日の予定と、「覚えて」での保存が使えます。");
+            }).catch(function(err){
+              refreshGoogleUI();
+              addDiagNote("Google接続に失敗: "+((err&&err.message)?err.message:String(err))+" / 状態: "+GoogleConn.getStateLabel());
+              if(st) st.textContent="Google：つなげませんでした（"+GoogleConn.getStateLabel()+"）。クライアントIDと、Google側でこのページのアドレスが許可されているかをご確認ください。";
+            });
+          });
+          if (discBtn) discBtn.addEventListener("click", function(){ GoogleConn.disconnect(); });
+          if (list) list.addEventListener("click", function(e){
+            var b = e.target.closest ? e.target.closest("[data-gmem-del]") : null;
+            if (!b) return;
+            var idx = parseInt(b.getAttribute("data-gmem-del"),10);
+            GoogleConn.deleteMemory(idx).catch(function(){ addDiagNote("Google: 覚えたことの削除保存に失敗しました"); });
+          });
+        })();
+
+        /* =========================================================
            Brain connection — the ONE place that talks to the AI
            brain, so it can be swapped later (e.g. to the Claude
            API) by rewriting only this block: endpoint, headers
@@ -1211,7 +1555,7 @@
             "――あなたのできること（正確に答えるための自覚）――\n" +
             "あなた「えむ」は会話専用のアシスタントで、実際に物を作る・動かす・実行することはできません。できるのは、質問への回答、説明、文章の下書き・要約・言い換え・翻訳、アイデア出し、相談相手です。\n" +
             "ページ側の即答機能（時刻・日付・日付計算、計算と単位換算、タイマー、開いている間だけのメモ、進行中の仕事の案内、会社と採用の案内）は、あなた（頭脳）とは別に働きます。自分のできることとして紹介する時は、その即答機能も含めて伝えてください。\n" +
-            "メール・予定は未接続です。ネット検索は無く、持っている知識だけで答えます。その点も、聞かれたら正直に伝えてください。\n" +
+            "メール（Gmail）には接続していません。予定は、Google接続がつながっている時だけページ側が読み取ります（今日・明日の予定はページ側の即答です）。Google Driveの「覚えたこと」が文脈として渡された場合は、それを踏まえて答えてください。ネット検索は無く、持っている知識だけで答えます。その点も、聞かれたら正直に伝えてください。\n" +
             "「何ができるの？」と聞かれたら、定型的な断り文ではなく、上記の内容を具体的に短く答えてください。\n" +
             "できない頼みごとには、約束の5と7に従い、できないことを正直に短く言い、話の範囲で手伝えることを示してください。大げさな謝罪の定型文（「私は音声アシスタントとして〜できません」といった決まり文句）は使わないでください。";
 
@@ -1253,6 +1597,10 @@
               return;
             }
             var msgs = [{ role: "system", content: SYSTEM_PROMPT }];
+            try{
+              var gctx = (typeof GoogleConn !== "undefined" && GoogleConn && GoogleConn.isConnected()) ? GoogleConn.getContextText() : "";
+              if (gctx) msgs.push({ role: "system", content: "――覚えたこと（専用Googleアカウントの Drive emu_memory.json より。直近のものを上限付きで渡しています）――\n" + gctx + "\n上記を踏まえて答えてください。覚えたことに無いことは、あるように言わないでください。" });
+            }catch(e){}
             var tail = hist.slice(-20); /* last 10 exchanges */
             for (var i = 0; i < tail.length; i++) msgs.push(tail[i]);
             msgs.push({ role: "user", content: text });
@@ -1342,6 +1690,10 @@
             }
             if (!key){ fallbackToAsk(); return; }
             var msgs = [{ role: "system", content: SYSTEM_PROMPT }];
+            try{
+              var gctx2 = (typeof GoogleConn !== "undefined" && GoogleConn && GoogleConn.isConnected()) ? GoogleConn.getContextText() : "";
+              if (gctx2) msgs.push({ role: "system", content: "――覚えたこと（専用Googleアカウントの Drive emu_memory.json より。直近のものを上限付きで渡しています）――\n" + gctx2 + "\n上記を踏まえて答えてください。覚えたことに無いことは、あるように言わないでください。" });
+            }catch(e){}
             var tail = hist.slice(-20); /* last 10 exchanges */
             for (var i = 0; i < tail.length; i++) msgs.push(tail[i]);
             msgs.push({ role: "user", content: text });
@@ -1888,6 +2240,7 @@
           };
         })();
         refreshSettingsUI();
+        try{ refreshGoogleUI(); }catch(e){}
 
         /* =========================================================
            Transcription connection — iPhone ONLY. The recorded
@@ -2077,6 +2430,12 @@
         var currentSpeakingText = "";
         function deliverReply(reply, done, gen){
           if (gen !== undefined && gen !== closeGen) return;
+          /* iPhone: the reply is about to be spoken — make sure
+             recording is fully stopped (mic tracks released) for
+             the whole playback. deliverUtterance already stopped
+             it on the voice path; this also covers replies
+             triggered from text input / chips while the mic is on. */
+          if (IS_IOS && micOn) iosReleaseMic();
           addMsg("ai", "MYU", reply);
           currentSpeakingText = reply;
           setState("speaking");
@@ -2088,6 +2447,15 @@
             currentSpeakingText = "";
             setState("idle");
             busy = false;
+            /* iPhone, reply to a typed question while the mic is
+               on (phase never left "listening"): restart the
+               recording that was stopped for playback. On the
+               voice path phase is "responding" and done() →
+               resumeListening() does the restart instead. The
+               restart re-acquires the mic under the session
+               generation check in iosAcquireAndListen, so a
+               session closed during playback is never revived. */
+            if (IS_IOS && micOn && phase === "listening") iosStartListening();
             if (done) done();
           };
           speak(reply, finish);
@@ -2121,6 +2489,12 @@
             currentSpeakingText = "";
             setState("idle");
             busy = false;
+            /* Same iPhone restart as deliverReply's finish:
+               typed question (phase stayed "listening") restarts
+               the recording here; the voice path is restarted by
+               done() → resumeListening(). Generation-checked in
+               iosAcquireAndListen. */
+            if (IS_IOS && micOn && phase === "listening") iosStartListening();
             if (done) done();
           };
           var speaker = Voice.createStreamSpeaker(function(){ finish(); });
@@ -2128,7 +2502,13 @@
           Brain.askStream(userText, history, {
             onSentence: function(sentence){
               if (gen !== undefined && gen !== closeGen) return;
-              if (!sawSentence){ sawSentence = true; setState("speaking"); }
+              if (!sawSentence){
+                sawSentence = true; setState("speaking");
+                /* iPhone: the first sentence starts playback —
+                   recording must be fully stopped by now (mic
+                   tracks released), as in deliverReply. */
+                if (IS_IOS && micOn) iosReleaseMic();
+              }
               displayText += sentence;
               currentSpeakingText = displayText;
               if (textNode) textNode.textContent = displayText;
@@ -2151,12 +2531,30 @@
               }
               pushHistory(userText, finalText);
               if (diag) addDiagNote(diag);
-              if (!sawSentence) setState("speaking");
+              if (!sawSentence){ setState("speaking"); if (IS_IOS && micOn) iosReleaseMic(); }
               speaker.end();
               /* Voice off: the speaker ends immediately (its pushes
                  were no-ops), so finish fires from its callback. */
             }
           });
+        }
+        function extractMemoryToSave(original){
+          var t = String(original||"").trim();
+          var m;
+          m = t.match(/^覚えて(?:おいて)?[：:、\s]+(.+)$/);
+          if (m) return m[1].trim().replace(/[。．]$/,"");
+          m = t.match(/^(.+?)を覚えて(?:おいて|ください|ね)?[。．\s]*$/);
+          if (m) return m[1].trim();
+          m = t.match(/^(.+?)覚えておいて[。．\s]*$/);
+          if (m) return m[1].replace(/を$/,"").trim();
+          return null;
+        }
+        function parseCalendarQuery(original){
+          var t = String(original||"").replace(/\s+/g,"");
+          if (!/予定/.test(t)) return -1;
+          if (/明日|あした/.test(t)) return 1;
+          if (/今日|きょう|本日/.test(t)) return 0;
+          return -1;
         }
         function ask(text, done){
           text = (text || "").trim();
@@ -2165,6 +2563,48 @@
           var gen = closeGen;
           addMsg("me", "MARUYAMA", text);
           setState("thinking");
+          /* --- Google intents (async): memory save + calendar --- */
+          var memContent = extractMemoryToSave(text);
+          if (memContent !== null){
+            if (!memContent){
+              var r0 = "覚える内容も一緒に言ってください。例えば「○○を覚えて」のようにお願いします。";
+              pushHistory(text, r0); deliverReply(r0, done, gen); return;
+            }
+            if (!GoogleConn.isConnected()){
+              var r1 = GoogleConn.getState()==="not_configured"
+                ? "Googleとつないでいません。覚えたことを保存するには、「頭脳の設定」のGoogle接続でクライアントIDを入れてつないでください。"
+                : "Googleとつないでいません。覚えたことを保存するには、「頭脳の設定」のGoogle接続でつないでください。";
+              pushHistory(text, r1); deliverReply(r1, done, gen); return;
+            }
+            GoogleConn.addMemory(memContent).then(function(saved){
+              if (gen !== closeGen) return;
+              var r = "覚えました。「"+saved+"」を、専用アカウントの Drive に保存しました（覚えたことは"+GoogleConn.getMemories().length+"件です）。";
+              pushHistory(text, r); deliverReply(r, done, gen);
+            }).catch(function(err){
+              if (gen !== closeGen) return;
+              var r2 = "すみません、保存できませんでした。Googleの接続が切れている可能性があります。「頭脳の設定」で接続の状態をご確認ください。";
+              addDiagNote("Google Drive保存失敗: "+((err&&err.message)?err.message:String(err)));
+              pushHistory(text, r2); deliverReply(r2, done, gen);
+            });
+            return;
+          }
+          var calOffset = parseCalendarQuery(text);
+          if (calOffset >= 0){
+            if (!GoogleConn.isConnected()){
+              var rc = "Googleとつないでいません。予定を見るには、「頭脳の設定」のGoogle接続でクライアントIDを入れて、専用アカウントとつないでください。";
+              pushHistory(text, rc); deliverReply(rc, done, gen); return;
+            }
+            GoogleConn.fetchSchedule(calOffset).then(function(reply){
+              if (gen !== closeGen) return;
+              pushHistory(text, reply); deliverReply(reply, done, gen);
+            }).catch(function(err){
+              if (gen !== closeGen) return;
+              var rc2 = "すみません、予定を読み取れませんでした。Googleの接続が切れている可能性があります。「頭脳の設定」でつなぎ直してください。";
+              addDiagNote("Google Calendar取得失敗: "+((err&&err.message)?err.message:String(err)));
+              pushHistory(text, rc2); deliverReply(rc2, done, gen);
+            });
+            return;
+          }
           var local = null;
           try{ local = answer(text); }catch(e){ local = null; }
           if (local !== null && local !== undefined){
@@ -2255,6 +2695,7 @@
             "音声認識: " + escHtml(srTxt) + "<br>" +
             "開始方式: " + (IS_IOS ? "文字起こし方式（iOS：録音 → OpenAI 文字起こし）" : "連続方式（continuous ON）") + "<br>" +
             "マイク取得: " + escHtml(gumTxt) + "<br>" +
+            "Google接続: " + escHtml((typeof GoogleConn !== "undefined" && GoogleConn) ? GoogleConn.getStateLabel() : "未設定") + "<br>" +
             "HTTPS（安全な接続）: " + escHtml(secTxt) + (proto ? " / protocol: " + escHtml(proto) : "") + "<br>" +
             "UA: " + escHtml(navigator.userAgent || "") + "</div>";
           return html;
@@ -2476,17 +2917,16 @@
              reply animation takes over. */
           stopMicLevel();
           var closing = isClosingUtterance(text);
-          /* iPhone: recording CONTINUES while the reply is spoken,
-             so the user can talk over the reply (barge-in). Each
-             chunk is transcribed and compared with the text being
-             spoken; chunks matching the page's own voice are
-             discarded (see iosHandleBargeSegment). For a closing
-             utterance only, recording pauses as before while the
-             farewell is spoken. */
-          if (IS_IOS){
-            if (closing) iosPauseRecording();
-            else iosBeginRespondingCapture();
-          }
+          /* iPhone: recording stops COMPLETELY while the reply is
+             spoken — the recorder is halted and the microphone
+             tracks are released (iosReleaseMic), so iOS ends the
+             record/playback (call-style) audio session that made
+             the reply volume drop. There is therefore no voice
+             barge-in on iPhone; when the reply ends,
+             resumeListening re-acquires the (already permitted)
+             microphone and listening resumes. PC / Android keep
+             their barge-in recognizer below, unchanged. */
+          if (IS_IOS) iosReleaseMic();
           var r = rec;
           if (r){ try{ r.abort(); }catch(e){} }
           recording = false;
@@ -2530,9 +2970,10 @@
            Barge-in: talking over the reply.
            While a reply is being generated / spoken (phase
            "responding", mic still ON), hearing stays alive in a
-           dedicated watch — on PC/Android a barge-in recognizer
-           (final results only), on iPhone continued recording with
-           per-chunk transcription. A chunk counts as an
+           dedicated watch — PC/Android only: a barge-in recognizer
+           (final results only). On iPhone, recording is fully
+           stopped for the whole reply (see deliverUtterance), so
+           there is no barge-in there. A chunk counts as an
            interruption ONLY when it became actual text (a final
            recognition result / a transcription): room noise and
            short interjections never stop the reply. Text matching
@@ -2586,7 +3027,6 @@
            speech queue + playing audio stop, barge watch stop. */
         function stopCurrentReply(){
           closeGen++;
-          try{ iosBargeSeq++; }catch(e){}
           try{ if (typeof Brain !== "undefined" && Brain && Brain.abortAll) Brain.abortAll(); }catch(e){}
           try{ if (typeof Transcribe !== "undefined" && Transcribe && Transcribe.abortAll) Transcribe.abortAll(); }catch(e){}
           try{ if (typeof Voice !== "undefined" && Voice && Voice.stop) Voice.stop(); }catch(e){}
@@ -2667,7 +3107,6 @@
         function resumeListening(){
           if (!micOn) return;
           stopBargeRecognition();
-          try{ iosBargeMode = false; iosBargeSeq++; }catch(e){}
           phase = "listening";
           accFinal = ""; interimNow = ""; lastHeardAt = 0;
           setState("listening");
@@ -3018,15 +3457,21 @@
              same flow as a recognised utterance (deliverUtterance:
              fixed patterns first, then the brain; a lone closing
              word still closes the mic).
-           - While a reply is spoken, recording CONTINUES in
-             barge-in watch mode (deliverUtterance →
-             iosBeginRespondingCapture): chunks are transcribed
-             and compared with the text being spoken, matches with
-             the page's own voice are discarded, and a real
-             utterance interrupts the reply. Only the farewell to
-             a closing utterance still pauses recording
-             (iosPauseRecording). resumeListening restarts normal
-             listening when the reply ends.
+           - While a reply is spoken, recording is stopped
+             COMPLETELY (iosReleaseMic, called from
+             deliverUtterance / deliverReply): the recorder halts
+             AND the getUserMedia tracks are stopped, so iOS fully
+             releases the recording session — recording while
+             playing back made iOS treat the output like a phone
+             call and dropped the reply volume sharply. iPhone
+             therefore has NO voice barge-in during a reply. When
+             the reply ends, resumeListening → iosStartListening
+             re-acquires the microphone (a re-get of an already
+             granted permission, so no new prompt) and listening
+             resumes; iosAcquireAndListen captures the session
+             generation, so a re-acquisition that resolves after
+             the session was closed stops its tracks and revives
+             nothing.
            PC / Android never touch any of this: they keep the
            SpeechRecognition session above, unchanged.
            ========================================================= */
@@ -3035,14 +3480,19 @@
         var iosProc = null, iosGain = null, iosWavBuffers = [];
         var iosSegActive = false, iosSegSpeech = false, iosSegStart = 0, iosLastLoudAt = 0;
         var iosVadTimer = null, iosTranscribing = false, iosLevelRaw = 0;
-        /* Barge-in watch (iPhone): while a reply is spoken,
-           recording continues in this mode; each cut chunk is
-           transcribed and checked against the spoken text.
-           iosBargeSeq invalidates a barge transcription that
-           resolves after the watch has ended. */
-        var iosBargeMode = false, iosBargeSeq = 0;
-
+        /* One getUserMedia per listening stretch. Re-acquisition
+           after a reply (the mic tracks were released for
+           playback) is a re-get of an already granted permission,
+           so the browser does not prompt again. The session
+           generation is captured up front: if the session was
+           closed (or replaced) while the request was in flight,
+           the arriving stream is stopped immediately and nothing
+           resumes — and if a NEW session is waiting, acquisition
+           is retried for it instead. */
+        var iosAcquiring = false;
         function iosAcquireAndListen(){
+          if (iosAcquiring) return;
+          var gen = closeGen;
           setState("listening");
           stateSub.textContent = "マイクの許可を確認しています…";
           if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
@@ -3050,15 +3500,20 @@
             voiceErrorNotice("audio-capture", "getUserMedia: なし（録音が使えません）");
             return;
           }
+          iosAcquiring = true;
           navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream){
-            if (!micOn){
+            iosAcquiring = false;
+            if (!micOn || gen !== closeGen){
               try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+              if (micOn) iosAcquireAndListen();
               return;
             }
             iosStream = stream;
             iosEnsureGraph();
             resumeListening();
           }).catch(function(err){
+            iosAcquiring = false;
+            if (!micOn || gen !== closeGen) return;
             var name = (err && err.name) ? String(err.name) : "Error";
             var code = (name === "NotAllowedError") ? "not-allowed" : "audio-capture";
             closeSession();
@@ -3127,17 +3582,21 @@
             iosChunks = [];
             try{
               iosRecorder = new MediaRecorder(iosStream, iosMimeOpt());
-              iosRecorder.ondataavailable = function(e){
+              /* Capture the instance: iosReleaseMic may clear the
+                 iosRecorder variable before onstop fires, and the
+                 handler must still read its own mimeType. */
+              var recSelf = iosRecorder;
+              recSelf.ondataavailable = function(e){
                 if (e.data && e.data.size) iosChunks.push(e.data);
               };
-              iosRecorder.onstop = function(){
-                var type = iosRecorder.mimeType || (iosChunks[0] && iosChunks[0].type) || "audio/mp4";
+              recSelf.onstop = function(){
+                var type = recSelf.mimeType || (iosChunks[0] && iosChunks[0].type) || "audio/mp4";
                 var blob = new Blob(iosChunks, { type: type });
                 iosChunks = [];
                 var cb = iosSegStopCb; iosSegStopCb = null;
                 if (cb) cb(blob);
               };
-              iosRecorder.start(200);
+              recSelf.start(200);
             }catch(e){
               iosSegActive = false;
               iosChunks = [];
@@ -3158,23 +3617,23 @@
           if (send) iosTranscribing = true;
           if (window.MediaRecorder && iosRecorder){
             iosSegStopCb = function(blob){
-              if (send){ if (iosBargeMode) iosHandleBargeSegment(blob); else iosHandleSegment(blob); }
-              else if (micOn && (phase === "listening" || iosBargeMode) && !iosTranscribing) iosStartSegment();
+              if (send) iosHandleSegment(blob);
+              else if (micOn && phase === "listening" && !iosTranscribing) iosStartSegment();
             };
             try{ iosRecorder.stop(); }catch(e){ iosSegStopCb = null; iosTranscribing = false; }
           } else {
             var blob2 = (iosWavBuffers && iosWavBuffers.length && iosCtx)
               ? iosEncodeWav(iosWavBuffers, iosCtx.sampleRate) : null;
             iosWavBuffers = [];
-            if (send){ if (iosBargeMode) iosHandleBargeSegment(blob2); else iosHandleSegment(blob2); }
-            else if (micOn && (phase === "listening" || iosBargeMode) && !iosTranscribing) iosStartSegment();
+            if (send) iosHandleSegment(blob2);
+            else if (micOn && phase === "listening" && !iosTranscribing) iosStartSegment();
           }
         }
         function iosStartVad(){
           if (iosVadTimer) return;
           var buf = new Float32Array(512);
           iosVadTimer = setInterval(function(){
-            if (!micOn || (phase !== "listening" && phase !== "responding") || iosTranscribing || !iosAnalyser) return;
+            if (!micOn || phase !== "listening" || iosTranscribing || !iosAnalyser) return;
             try{ iosAnalyser.getFloatTimeDomainData(buf); }catch(e){ return; }
             var sum = 0, i;
             for (i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
@@ -3193,11 +3652,7 @@
               iosEndSegment(true);
             } else if (!iosSegSpeech && now - iosSegStart >= 15000){
               iosEndSegment(false);
-            } else if (now - iosSegStart >= (iosBargeMode ? 4000 : 30000)){
-              /* Barge-in watch: cut every ~4s even while sound
-                 continues (the reply itself keeps the mic busy),
-                 so chunks are checked against the spoken text
-                 regularly instead of only after the reply ends. */
+            } else if (now - iosSegStart >= 30000){
               iosEndSegment(iosSegSpeech);
             }
           }, 100);
@@ -3253,52 +3708,30 @@
             if (phase === "listening"){ setState("listening"); renderListenSub(); iosStartSegment(); }
           });
         }
-        /* Barge-in watch (iPhone): keep recording while the reply
-           is spoken. The VAD keeps cutting chunks (0.5s of silence,
-           or ~4s while sound continues); each chunk is transcribed
-           and compared with the text being spoken — a chunk that
-           matches the page's own voice is discarded, anything else
-           is handed to onBargeInUtterance as a real interruption.
-           The state display is NOT switched to "transcribing"
-           here: the reply keeps the screen until it is actually
-           interrupted. */
-        function iosBeginRespondingCapture(){
-          iosBargeSeq++;
-          iosBargeMode = true;
-          if (iosCtx && iosCtx.state === "suspended"){ try{ iosCtx.resume(); }catch(e){} }
-          iosStartVad();
-          if (!iosSegActive && !iosTranscribing) iosStartSegment();
-        }
-        function iosHandleBargeSegment(blob){
-          var seq = iosBargeSeq;
-          var gen = closeGen;
-          if (!blob || blob.size < 600){
-            iosTranscribing = false;
-            if (micOn && iosBargeMode && phase === "responding") iosStartSegment();
-            return;
+        /* Stop recording COMPLETELY for reply playback (iPhone):
+           halt the current segment (discarded, never transcribed)
+           and the VAD, stop every getUserMedia track, and close
+           the audio context, so iOS fully releases the recording
+           session while the reply plays — this release is the
+           point of the change, since keeping the mic open during
+           playback is what dropped the volume. The mic session
+           itself (micOn / phase) is untouched; when the reply
+           ends, resumeListening re-acquires the mic and listening
+           resumes. Also used by iosStopSession when the session
+           closes for good. */
+        function iosReleaseMic(){
+          iosPauseRecording();
+          if (iosStream){
+            try{ iosStream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+            iosStream = null;
           }
-          Transcribe.transcribe(blob).then(function(text){
-            iosTranscribing = false;
-            if (!micOn || gen !== closeGen || seq !== iosBargeSeq || !iosBargeMode || phase !== "responding") return;
-            text = (text || "").trim();
-            if (!text){ iosStartSegment(); return; }
-            if (!isClosingUtterance(text) && !isStopUtterance(text) && isOwnVoiceEcho(text)){
-              /* The page's own voice: discard and keep watching. */
-              iosStartSegment();
-              return;
-            }
-            onBargeInUtterance(text);
-          }).catch(function(err){
-            iosTranscribing = false;
-            if (!micOn || gen !== closeGen || seq !== iosBargeSeq) return;
-            if (err && err.aborted) return;
-            /* A failed barge chunk is dropped quietly — no note,
-               no retry — and the watch continues. */
-            if (iosBargeMode && phase === "responding") iosStartSegment();
-          });
+          if (iosCtx){
+            try{ iosCtx.close(); }catch(e){}
+            iosCtx = null; iosSource = null; iosAnalyser = null;
+            iosProc = null; iosGain = null; iosRecorder = null;
+          }
         }
         function iosPauseRecording(){
-          iosBargeMode = false;
           if (iosVadTimer){ clearInterval(iosVadTimer); iosVadTimer = null; }
           iosLevelRaw = 0;
           if (iosSegActive){
@@ -3311,17 +3744,8 @@
           }
         }
         function iosStopSession(){
-          iosPauseRecording();
+          iosReleaseMic();
           iosTranscribing = false;
-          if (iosStream){
-            try{ iosStream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
-            iosStream = null;
-          }
-          if (iosCtx){
-            try{ iosCtx.close(); }catch(e){}
-            iosCtx = null; iosSource = null; iosAnalyser = null;
-            iosProc = null; iosGain = null; iosRecorder = null;
-          }
         }
         /* Encode captured Float32 chunks as a 16-bit PCM WAV
            (mono, the context's sample rate) — a format the
